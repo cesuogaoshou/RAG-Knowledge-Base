@@ -13,4 +13,5 @@ class UploadedDocument(BaseModel):
     saved_path: str
     text_length: int
     page_count: int
+    chunk_count: int = 0
     pages: list[DocumentPage]

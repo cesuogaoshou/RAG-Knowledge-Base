@@ -4,12 +4,26 @@ from uuid import uuid4
 
 import fitz
 from fastapi.testclient import TestClient
+import chromadb
 
 from app.main import create_app
 
 
-def _client_with_upload_dir(upload_dir: Path) -> TestClient:
-    return TestClient(create_app(upload_dir=upload_dir))
+class FakeEmbeddingService:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [[float(len(text)), float(index)] for index, text in enumerate(texts)]
+
+
+def _client_with_upload_dir(upload_dir: Path, vector_store_dir: Path | None = None) -> TestClient:
+    return TestClient(
+        create_app(
+            upload_dir=upload_dir,
+            vector_store_dir=vector_store_dir or upload_dir / "chroma_db",
+            embedding_service=FakeEmbeddingService(),
+            chunk_size=20,
+            chunk_overlap=5,
+        )
+    )
 
 
 def _workspace_upload_dir() -> Path:
@@ -47,6 +61,7 @@ def test_upload_txt_document_saves_file_and_returns_metadata() -> None:
         assert body["type"] == "txt"
         assert body["text_length"] == len("RAG stores private document context.")
         assert body["page_count"] == 1
+        assert body["chunk_count"] == 3
         assert body["pages"] == [
             {
                 "page": 1,
@@ -57,6 +72,40 @@ def test_upload_txt_document_saves_file_and_returns_metadata() -> None:
         assert (upload_dir / Path(body["saved_path"]).name).read_text(encoding="utf-8") == (
             "RAG stores private document context."
         )
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_upload_txt_document_persists_chunks_to_chroma() -> None:
+    upload_dir = _workspace_upload_dir()
+    vector_store_dir = upload_dir / "chroma_db"
+    try:
+        client = _client_with_upload_dir(upload_dir, vector_store_dir=vector_store_dir)
+
+        response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"RAG stores private context for grounded answers.",
+                    "text/plain",
+                )
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["chunk_count"] == 4
+
+        chroma_client = chromadb.PersistentClient(path=str(vector_store_dir))
+        collection = chroma_client.get_collection("document_chunks")
+        stored = collection.get(where={"document_id": body["id"]})
+
+        assert len(stored["ids"]) == 4
+        assert stored["metadatas"][0]["filename"] == "notes.txt"
+        assert stored["metadatas"][0]["page"] == 1
+        assert stored["metadatas"][0]["chunk_index"] == 0
+        assert "RAG stores private" in stored["documents"][0]
     finally:
         _remove_tree(upload_dir)
 

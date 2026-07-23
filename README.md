@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1.2 document upload and parsing is complete. The backend currently exposes a health check endpoint and a document upload endpoint for PDF, TXT, and Markdown files.
+Phase 1.3 chunking and Chroma persistence is complete. The backend currently exposes a health check endpoint and a document upload endpoint for PDF, TXT, and Markdown files. Uploaded text is split into chunks, embedded, and stored in a local ChromaDB collection.
 
 ## Backend Development
 
@@ -70,4 +70,4 @@ Content-Type: multipart/form-data
 file: PDF/TXT/MD
 ```
 
-The upload response includes the generated document id, original filename, saved path, document type, page count, text length, and parsed page text.
+The upload response includes the generated document id, original filename, saved path, document type, page count, chunk count, text length, and parsed page text.
