@@ -1,3 +1,14 @@
 # Local planning and agent context documents
 /AGENTS.md
 /docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Backend local environment and data
+/backend/.venv/
+/backend/.env
+/backend/data/uploads/
+/backend/data/chroma_db/
