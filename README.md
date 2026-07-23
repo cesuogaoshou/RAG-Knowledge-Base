@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1.4 Top-K retrieval is complete. The backend currently exposes health check, document upload, and search endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, and retrievable through semantic search.
+Phase 1.5 DeepSeek-backed chat is complete. The backend currently exposes health check, document upload, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
 
 ## Backend Development
 
@@ -42,6 +42,14 @@ backend\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r backend\requirements-dev.txt
 ```
+
+Configure DeepSeek credentials:
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
+
+Then set `DEEPSEEK_API_KEY` in `backend\.env` or in your shell environment before calling `/api/chat`.
 
 Run tests:
 
@@ -85,3 +93,17 @@ Content-Type: application/json
 ```
 
 The search response includes the query, requested Top-K value, and matching chunks with filename, page number, chunk index, content, and score.
+
+Ask a question with retrieved context:
+
+```text
+POST http://127.0.0.1:8000/api/chat
+Content-Type: application/json
+
+{
+  "question": "How does RAG work?",
+  "top_k": 5
+}
+```
+
+The chat response includes an LLM-generated answer and the retrieved sources used as context.

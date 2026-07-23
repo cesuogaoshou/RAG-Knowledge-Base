@@ -2,8 +2,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app.api.chat import create_chat_router
 from app.api.documents import create_documents_router
 from app.api.search import create_search_router
+from app.services.chat_service import ChatService, DeepSeekChatService
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
 from app.services.vector_store import ChromaVectorStore
 
@@ -16,6 +18,7 @@ def create_app(
     upload_dir: Path | None = None,
     vector_store_dir: Path | None = None,
     embedding_service: EmbeddingService | None = None,
+    chat_service: ChatService | None = None,
     chunk_size: int = 800,
     chunk_overlap: int = 120,
 ) -> FastAPI:
@@ -46,6 +49,13 @@ def create_app(
         create_search_router(
             vector_store=vector_store,
             embedding_service=resolved_embedding_service,
+        )
+    )
+    app.include_router(
+        create_chat_router(
+            vector_store=vector_store,
+            embedding_service=resolved_embedding_service,
+            chat_service=chat_service or DeepSeekChatService(),
         )
     )
 
