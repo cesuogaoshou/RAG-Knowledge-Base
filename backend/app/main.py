@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.api.documents import create_documents_router
+from app.api.search import create_search_router
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
 from app.services.vector_store import ChromaVectorStore
 
@@ -31,13 +32,20 @@ def create_app(
         }
 
     vector_store = ChromaVectorStore(vector_store_dir or DEFAULT_VECTOR_STORE_DIR)
+    resolved_embedding_service = embedding_service or SentenceTransformerEmbeddingService()
     app.include_router(
         create_documents_router(
             upload_dir=upload_dir or DEFAULT_UPLOAD_DIR,
             vector_store=vector_store,
-            embedding_service=embedding_service or SentenceTransformerEmbeddingService(),
+            embedding_service=resolved_embedding_service,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+        )
+    )
+    app.include_router(
+        create_search_router(
+            vector_store=vector_store,
+            embedding_service=resolved_embedding_service,
         )
     )
 

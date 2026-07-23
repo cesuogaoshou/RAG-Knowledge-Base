@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1.3 chunking and Chroma persistence is complete. The backend currently exposes a health check endpoint and a document upload endpoint for PDF, TXT, and Markdown files. Uploaded text is split into chunks, embedded, and stored in a local ChromaDB collection.
+Phase 1.4 Top-K retrieval is complete. The backend currently exposes health check, document upload, and search endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, and retrievable through semantic search.
 
 ## Backend Development
 
@@ -71,3 +71,17 @@ file: PDF/TXT/MD
 ```
 
 The upload response includes the generated document id, original filename, saved path, document type, page count, chunk count, text length, and parsed page text.
+
+Search document chunks:
+
+```text
+POST http://127.0.0.1:8000/api/search
+Content-Type: application/json
+
+{
+  "question": "How does RAG work?",
+  "top_k": 5
+}
+```
+
+The search response includes the query, requested Top-K value, and matching chunks with filename, page number, chunk index, content, and score.
