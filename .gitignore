@@ -6,6 +6,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+/.test-data/
 
 # Backend local environment and data
 /backend/.venv/

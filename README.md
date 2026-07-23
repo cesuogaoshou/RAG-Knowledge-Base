@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1.1 backend skeleton is complete. The project currently exposes a minimal FastAPI app with a health check endpoint.
+Phase 1.2 document upload and parsing is complete. The backend currently exposes a health check endpoint and a document upload endpoint for PDF, TXT, and Markdown files.
 
 ## Backend Development
 
@@ -61,3 +61,13 @@ Health check:
 ```text
 GET http://127.0.0.1:8000/health
 ```
+
+Upload a document:
+
+```text
+POST http://127.0.0.1:8000/api/documents/upload
+Content-Type: multipart/form-data
+file: PDF/TXT/MD
+```
+
+The upload response includes the generated document id, original filename, saved path, document type, page count, text length, and parsed page text.
