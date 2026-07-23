@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1.5 DeepSeek-backed chat is complete. The backend currently exposes health check, document upload, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
+Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
 
 ## Backend Development
 
@@ -79,6 +79,14 @@ file: PDF/TXT/MD
 ```
 
 The upload response includes the generated document id, original filename, saved path, document type, page count, chunk count, text length, and parsed page text.
+
+List uploaded documents:
+
+```text
+GET http://127.0.0.1:8000/api/documents
+```
+
+The document list response includes document id, filename, type, created time, and chunk count.
 
 Search document chunks:
 

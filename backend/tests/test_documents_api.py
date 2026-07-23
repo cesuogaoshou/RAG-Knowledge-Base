@@ -14,11 +14,16 @@ class FakeEmbeddingService:
         return [[float(len(text)), float(index)] for index, text in enumerate(texts)]
 
 
-def _client_with_upload_dir(upload_dir: Path, vector_store_dir: Path | None = None) -> TestClient:
+def _client_with_upload_dir(
+    upload_dir: Path,
+    vector_store_dir: Path | None = None,
+    metadata_store_path: Path | None = None,
+) -> TestClient:
     return TestClient(
         create_app(
             upload_dir=upload_dir,
             vector_store_dir=vector_store_dir or upload_dir / "chroma_db",
+            metadata_store_path=metadata_store_path or upload_dir / "documents.json",
             embedding_service=FakeEmbeddingService(),
             chunk_size=20,
             chunk_overlap=5,
@@ -108,6 +113,67 @@ def test_upload_txt_document_persists_chunks_to_chroma() -> None:
         assert "RAG stores private" in stored["documents"][0]
     finally:
         _remove_tree(upload_dir)
+
+
+def test_list_documents_returns_uploaded_document_metadata() -> None:
+    upload_dir = _workspace_upload_dir()
+    try:
+        client = _client_with_upload_dir(upload_dir)
+
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG stores private document context.", "text/plain")},
+        )
+        assert upload_response.status_code == 201
+        uploaded = upload_response.json()
+
+        list_response = client.get("/api/documents")
+
+        assert list_response.status_code == 200
+        documents = list_response.json()
+        assert documents == [
+            {
+                "id": uploaded["id"],
+                "filename": "notes.txt",
+                "type": "txt",
+                "created_at": uploaded["created_at"],
+                "chunk_count": uploaded["chunk_count"],
+            }
+        ]
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_document_metadata_persists_across_app_restarts() -> None:
+    workspace = _workspace_upload_dir()
+    metadata_store_path = workspace / "documents.json"
+    vector_store_dir = workspace / "chroma_db"
+    try:
+        first_client = _client_with_upload_dir(
+            workspace / "uploads",
+            vector_store_dir=vector_store_dir,
+            metadata_store_path=metadata_store_path,
+        )
+        upload_response = first_client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG persists document metadata.", "text/plain")},
+        )
+        assert upload_response.status_code == 201
+
+        second_client = _client_with_upload_dir(
+            workspace / "uploads",
+            vector_store_dir=vector_store_dir,
+            metadata_store_path=metadata_store_path,
+        )
+        list_response = second_client.get("/api/documents")
+
+        assert list_response.status_code == 200
+        documents = list_response.json()
+        assert len(documents) == 1
+        assert documents[0]["filename"] == "notes.txt"
+        assert documents[0]["chunk_count"] == upload_response.json()["chunk_count"]
+    finally:
+        _remove_tree(workspace)
 
 
 def test_upload_markdown_document_is_parsed_as_text() -> None:

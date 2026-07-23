@@ -11,5 +11,6 @@ __pycache__/
 # Backend local environment and data
 /backend/.venv/
 /backend/.env
+/backend/data/
 /backend/data/uploads/
 /backend/data/chroma_db/

@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import fitz
@@ -35,6 +36,7 @@ async def save_and_parse_document(file: UploadFile, upload_dir: Path) -> Uploade
         id=document_id,
         filename=original_filename,
         type=_document_type(extension),
+        created_at=datetime.now(timezone.utc).isoformat(),
         saved_path=str(saved_path),
         text_length=text_length,
         page_count=len(pages),
