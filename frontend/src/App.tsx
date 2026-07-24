@@ -1,33 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 
 import './App.css'
 import {
+  askQuestion,
   apiBaseUrl,
   fetchDocuments,
   fetchHealth,
   uploadDocument,
   type DocumentSummary,
+  type SourceCitation,
 } from './api/client'
 
 type BackendStatus = 'checking' | 'online' | 'offline'
 type LoadingStatus = 'idle' | 'loading' | 'success' | 'error'
-
-const sources = [
-  {
-    filename: 'phase2-test.md',
-    page: 1,
-    score: '0.84',
-    excerpt:
-      'RAG 会先检索相关文档片段，再把这些上下文交给模型生成有依据的回答。',
-  },
-  {
-    filename: 'course-notes.txt',
-    page: 1,
-    score: '0.72',
-    excerpt:
-      '后端会把解析后的文本片段和元数据存入 ChromaDB，方便后续问题进行语义检索。',
-  },
-]
+type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+}
 
 function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
@@ -38,7 +28,14 @@ function App() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<LoadingStatus>('idle')
   const [uploadMessage, setUploadMessage] = useState('支持 PDF、TXT、Markdown 文件')
+  const [topK, setTopK] = useState(3)
+  const [question, setQuestion] = useState('')
+  const [chatStatus, setChatStatus] = useState<LoadingStatus>('idle')
+  const [chatMessage, setChatMessage] = useState('输入问题后，将基于已上传文档生成回答')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [answerSources, setAnswerSources] = useState<SourceCitation[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const conversationRef = useRef<HTMLDivElement>(null)
 
   const loadDocuments = useCallback(async () => {
     setDocumentStatus('loading')
@@ -93,6 +90,13 @@ function App() {
     }
   }, [loadDocuments])
 
+  useEffect(() => {
+    const conversation = conversationRef.current
+    if (conversation) {
+      conversation.scrollTop = conversation.scrollHeight
+    }
+  }, [chatMessage, chatMessages])
+
   async function handleUploadChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
     const file = input.files?.[0]
@@ -118,6 +122,50 @@ function App() {
       input.value = ''
     }
   }
+
+  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const trimmedQuestion = question.trim()
+    if (!trimmedQuestion) {
+      setChatStatus('error')
+      setChatMessage('请输入问题后再提问')
+      return
+    }
+
+    setChatStatus('loading')
+    setChatMessage('正在检索文档并生成回答')
+    setChatMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: `question-${Date.now()}`,
+        role: 'user',
+        content: trimmedQuestion,
+      },
+    ])
+
+    try {
+      const response = await askQuestion({ question: trimmedQuestion, top_k: topK })
+      setChatMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: `answer-${Date.now()}`,
+          role: 'assistant',
+          content: response.answer,
+        },
+      ])
+      setAnswerSources(response.sources)
+      setChatStatus('success')
+      setChatMessage('回答已生成')
+      setQuestion('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '提问失败，请稍后重试'
+      setChatStatus('error')
+      setChatMessage(message)
+    }
+  }
+
+  const canAsk = backendStatus === 'online' && chatStatus !== 'loading'
 
   return (
     <main className="app-shell">
@@ -205,7 +253,12 @@ function App() {
             </div>
             <label className="topk-control">
               <span>Top-K</span>
-              <select defaultValue="3" aria-label="Top-K 来源数量">
+              <select
+                aria-label="Top-K 来源数量"
+                disabled={chatStatus === 'loading'}
+                onChange={(event) => setTopK(Number(event.currentTarget.value))}
+                value={topK}
+              >
                 <option value="3">3</option>
                 <option value="5">5</option>
                 <option value="8">8</option>
@@ -213,49 +266,70 @@ function App() {
             </label>
           </div>
 
-          <div className="conversation" aria-label="问答记录">
-            <article className="message user-message">
-              <span className="message-role">问题</span>
-              <p>这个项目是如何实现文档问答的？</p>
-            </article>
-            <article className="message assistant-message">
-              <span className="message-role">回答</span>
-              <p>
-                这个项目会上传私有文档，将文本切分成片段，把向量存入 ChromaDB，
-                再根据问题检索最相关的片段，并调用 DeepSeek Chat 生成带来源引用的回答。
-              </p>
-            </article>
+          <div className="conversation" aria-label="问答记录" ref={conversationRef}>
+            {chatMessages.length > 0 ? (
+              chatMessages.map((message) => (
+                <article
+                  className={
+                    message.role === 'user' ? 'message user-message' : 'message assistant-message'
+                  }
+                  key={message.id}
+                >
+                  <span className="message-role">{message.role === 'user' ? '问题' : '回答'}</span>
+                  <p>{message.content}</p>
+                </article>
+              ))
+            ) : (
+              <article className="message assistant-message empty-message">
+                <span className="message-role">回答</span>
+                <p>上传文档后，可以在这里提出问题并查看基于来源的回答。</p>
+              </article>
+            )}
+            <p className={`chat-state ${chatStatus}`} aria-live="polite">
+              {chatMessage}
+            </p>
           </div>
 
           <section className="sources-panel" aria-label="回答来源">
             <div className="sources-heading">
               <h3>引用来源</h3>
-              <span>{sources.length} 个匹配片段</span>
+              <span>{answerSources.length} 个匹配片段</span>
             </div>
             <div className="source-list">
-              {sources.map((source) => (
-                <article className="source-card" key={`${source.filename}-${source.score}`}>
-                  <div className="source-meta">
-                    <strong>{source.filename}</strong>
-                    <span>
-                      第 {source.page} 页 · 相似度 {source.score}
-                    </span>
-                  </div>
-                  <p>{source.excerpt}</p>
-                </article>
-              ))}
+              {answerSources.length > 0 ? (
+                answerSources.map((source, index) => (
+                  <article
+                    className="source-card"
+                    key={`${source.filename}-${source.page}-${source.chunk_index}-${index}`}
+                  >
+                    <div className="source-meta">
+                      <strong>{source.filename}</strong>
+                      <span>
+                        第 {source.page} 页 · 相似度 {source.score.toFixed(3)}
+                      </span>
+                    </div>
+                    <p>{source.content}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="source-empty">完成一次提问后，这里会显示后端返回的来源片段。</p>
+              )}
             </div>
           </section>
 
-          <form className="chat-input" aria-label="提出问题">
+          <form className="chat-input" aria-label="提出问题" onSubmit={(event) => void handleChatSubmit(event)}>
             <label htmlFor="question">问题</label>
             <div className="input-row">
               <input
                 id="question"
+                onChange={(event) => setQuestion(event.currentTarget.value)}
                 placeholder="输入一个基于已上传文档的问题"
+                value={question}
                 type="text"
               />
-              <button type="submit">提问</button>
+              <button disabled={!canAsk} type="submit">
+                {chatStatus === 'loading' ? '生成中' : '提问'}
+              </button>
             </div>
           </form>
         </section>

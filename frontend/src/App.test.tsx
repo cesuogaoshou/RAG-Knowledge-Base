@@ -1,8 +1,14 @@
+/// <reference types="node" />
+
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import App from './App'
+
+const appCss = readFileSync(resolve('src/App.css'), 'utf8')
 
 const makeJsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -19,6 +25,7 @@ describe('App document workflow', () => {
 
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -116,5 +123,132 @@ describe('App document workflow', () => {
         expect.objectContaining({ method: 'POST' }),
       )
     })
+  })
+})
+
+describe('App chat workflow', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  test('submits a question with the selected Top-K and renders the answer with sources', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([
+          {
+            id: 'doc-1',
+            filename: 'rag-notes.md',
+            type: 'md',
+            created_at: '2026-07-24 10:20:00',
+            chunk_count: 4,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/chat') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          question: 'RAG 的回答来源如何展示？',
+          top_k: 5,
+        })
+
+        return makeJsonResponse({
+          answer: '前端会展示模型回答，并在下方列出检索命中的来源片段。',
+          sources: [
+            {
+              filename: 'rag-notes.md',
+              page: 2,
+              chunk_index: 3,
+              content: '回答来源来自后端返回的 sources 数组。',
+              score: 0.8123,
+            },
+            {
+              filename: 'rag-notes.md',
+              page: 2,
+              chunk_index: 3,
+              content: '后端可能返回重复 chunk，前端仍应稳定渲染。',
+              score: 0.8123,
+            },
+          ],
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.selectOptions(screen.getByLabelText('Top-K 来源数量'), '5')
+    await userEvent.type(screen.getByLabelText('问题'), 'RAG 的回答来源如何展示？')
+    await userEvent.click(screen.getByRole('button', { name: '提问' }))
+
+    expect(await screen.findByText('前端会展示模型回答，并在下方列出检索命中的来源片段。')).toBeTruthy()
+    expect(screen.getAllByText('rag-notes.md').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('第 2 页 · 相似度 0.812')).toHaveLength(2)
+    expect(screen.getByText('回答来源来自后端返回的 sources 数组。')).toBeTruthy()
+    expect(screen.getByText('后端可能返回重复 chunk，前端仍应稳定渲染。')).toBeTruthy()
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Encountered two children with the same key'),
+      expect.anything(),
+    )
+
+    consoleErrorSpy.mockRestore()
+  })
+
+  test('shows a chat error message when the backend rejects the request', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat') && init?.method === 'POST') {
+        return makeJsonResponse({ detail: '请先上传文档后再提问' }, 400)
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.type(screen.getByLabelText('问题'), '现在可以提问吗？')
+    await userEvent.click(screen.getByRole('button', { name: '提问' }))
+
+    expect(await screen.findByText('请先上传文档后再提问')).toBeTruthy()
+  })
+})
+
+describe('App layout constraints', () => {
+  test('keeps the workspace fixed to the viewport with internal scroll regions', () => {
+    expect(appCss).toContain('height: 100dvh;')
+    expect(appCss).toContain('overflow: hidden;')
+    expect(appCss).toContain('grid-template-rows: auto minmax(0, 1fr);')
+    expect(appCss).toContain('grid-template-rows: auto auto minmax(0, 1fr);')
+    expect(appCss).toContain('grid-template-rows: auto minmax(0, 1fr) minmax(118px, 0.36fr) auto;')
+    expect(appCss).toContain('.chat-panel > .panel-heading')
+    expect(appCss).not.toMatch(/\.conversation\s*{[^}]*align-content:\s*end;/s)
   })
 })

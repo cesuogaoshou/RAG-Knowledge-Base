@@ -1,9 +1,11 @@
 .app-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 680px;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
   padding: 22px;
+  overflow: hidden;
 }
 
 .topbar {
@@ -92,6 +94,7 @@ h3 {
   display: grid;
   grid-template-columns: minmax(310px, 0.38fr) minmax(460px, 0.62fr);
   gap: 18px;
+  overflow: hidden;
 }
 
 .documents-panel,
@@ -105,16 +108,18 @@ h3 {
 
 .documents-panel {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 16px;
   padding: 18px;
+  overflow: hidden;
 }
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto minmax(0, 1fr) minmax(118px, 0.36fr) auto;
   gap: 16px;
   padding: 18px;
+  overflow: hidden;
 }
 
 .panel-heading,
@@ -219,8 +224,10 @@ h3 {
 .upload-zone p,
 .document-meta p,
 .source-card p,
+.source-empty,
 .source-meta span,
-.sources-heading span {
+.sources-heading span,
+.chat-state {
   color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.45;
@@ -246,6 +253,7 @@ h3 {
   align-content: start;
   gap: 10px;
   overflow: auto;
+  padding-right: 2px;
 }
 
 .document-state {
@@ -256,6 +264,21 @@ h3 {
 }
 
 .document-state.error {
+  color: var(--destructive);
+  font-weight: 700;
+}
+
+.chat-state {
+  justify-self: center;
+  padding: 2px 0;
+}
+
+.chat-state.loading {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.chat-state.error {
   color: var(--destructive);
   font-weight: 700;
 }
@@ -298,9 +321,9 @@ h3 {
 }
 
 .conversation {
-  min-height: 240px;
+  min-height: 0;
   display: grid;
-  align-content: end;
+  align-content: start;
   gap: 12px;
   overflow: auto;
   padding: 16px;
@@ -336,9 +359,16 @@ h3 {
   background: var(--surface);
 }
 
+.empty-message {
+  max-width: 54ch;
+}
+
 .sources-panel {
+  min-height: 0;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .source-card {
@@ -348,6 +378,10 @@ h3 {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.source-empty {
+  padding: 2px 0;
 }
 
 .source-meta {
@@ -381,6 +415,11 @@ h3 {
   font: inherit;
   font-weight: 700;
   padding: 0 10px;
+}
+
+.topk-control select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .chat-input {
@@ -428,6 +467,7 @@ input:focus-visible {
 
 @media (max-width: 900px) {
   .app-shell {
+    min-height: 100dvh;
     padding: 16px;
   }
 
@@ -438,24 +478,68 @@ input:focus-visible {
 
   .workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(220px, 0.42fr) minmax(360px, 0.58fr);
   }
 
   .documents-panel,
   .chat-panel {
-    min-height: auto;
+    min-height: 0;
   }
 }
 
 @media (max-width: 560px) {
   .app-shell {
+    min-height: 720px;
     padding: 12px;
   }
 
+  .topbar {
+    gap: 12px;
+    min-height: 0;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .workspace {
+    gap: 12px;
+    grid-template-rows: minmax(0, 0.46fr) minmax(0, 0.54fr);
+  }
+
+  .documents-panel,
+  .chat-panel {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .upload-zone {
+    min-height: 78px;
+    padding: 12px;
+  }
+
+  .upload-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .chat-panel {
+    grid-template-rows: auto minmax(76px, 0.7fr) minmax(70px, 0.3fr) auto;
+  }
+
   .panel-heading,
-  .sources-heading,
   .source-meta {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .chat-panel > .panel-heading {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .sources-heading {
+    align-items: center;
   }
 
   .input-row {
