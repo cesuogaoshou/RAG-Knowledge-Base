@@ -8,9 +8,14 @@ __pycache__/
 .pytest_cache/
 /.test-data/
 
+# Local smoke-test and package-manager cache files
+/.npm-cache/
+/phase2-test.md
+
 # Backend local environment and data
 /backend/.venv/
 /backend/.env
 /backend/data/
 /backend/data/uploads/
 /backend/data/chroma_db/
+/backend/*.log
