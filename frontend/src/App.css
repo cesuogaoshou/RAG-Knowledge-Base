@@ -142,6 +142,13 @@ h3 {
     box-shadow 160ms ease;
 }
 
+.secondary-button:disabled,
+.chat-input button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  box-shadow: none;
+}
+
 .secondary-button {
   padding: 0 16px;
 }
@@ -166,6 +173,40 @@ h3 {
   border: 1px dashed #b7c1cf;
   border-radius: 8px;
   background: #f8fafc;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.upload-zone:hover {
+  border-color: #2563eb;
+  background: #f1f7ff;
+}
+
+.upload-zone.loading {
+  border-color: #d97706;
+  background: #fffbeb;
+}
+
+.upload-zone.success {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.upload-zone.error {
+  border-color: var(--destructive);
+  background: #fef2f2;
+}
+
+.upload-zone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .upload-zone strong {
@@ -207,6 +248,18 @@ h3 {
   overflow: auto;
 }
 
+.document-state {
+  padding: 2px 0 4px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.document-state.error {
+  color: var(--destructive);
+  font-weight: 700;
+}
+
 .document-row {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -216,6 +269,15 @@ h3 {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.document-row:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
 }
 
 .document-row.active {
