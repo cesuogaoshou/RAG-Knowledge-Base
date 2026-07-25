@@ -116,13 +116,14 @@ h3 {
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(118px, 0.36fr) auto;
+  grid-template-rows: auto minmax(0, 0.82fr) minmax(150px, 0.32fr) minmax(100px, 0.26fr) auto;
   gap: 16px;
   padding: 18px;
   overflow: hidden;
 }
 
 .panel-heading,
+.retrieval-heading,
 .sources-heading {
   display: flex;
   align-items: center;
@@ -132,6 +133,7 @@ h3 {
 
 .secondary-button,
 .document-delete-button,
+.retrieval-form button,
 .chat-input button {
   min-height: 42px;
   border: 0;
@@ -150,6 +152,7 @@ h3 {
 
 .secondary-button:disabled,
 .document-delete-button:disabled,
+.retrieval-form button:disabled,
 .chat-input button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -162,6 +165,7 @@ h3 {
 
 .secondary-button:hover,
 .document-delete-button:hover,
+.retrieval-form button:hover,
 .chat-input button:hover {
   background: #1d4ed8;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
@@ -169,6 +173,7 @@ h3 {
 
 .secondary-button:active,
 .document-delete-button:active,
+.retrieval-form button:active,
 .chat-input button:active {
   transform: translateY(1px);
 }
@@ -227,10 +232,13 @@ h3 {
 
 .upload-zone p,
 .document-meta p,
+.retrieval-card p,
 .source-card p,
 .source-empty,
 .source-meta span,
+.retrieval-heading span,
 .sources-heading span,
+.retrieval-state,
 .chat-state {
   color: var(--muted-foreground);
   font-size: 13px;
@@ -251,6 +259,7 @@ h3 {
 }
 
 .document-list,
+.retrieval-list,
 .source-list {
   min-height: 0;
   display: grid;
@@ -288,6 +297,20 @@ h3 {
 }
 
 .chat-state.error {
+  color: var(--destructive);
+  font-weight: 700;
+}
+
+.retrieval-state {
+  padding: 0;
+}
+
+.retrieval-state.loading {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.retrieval-state.error {
   color: var(--destructive);
   font-weight: 700;
 }
@@ -392,6 +415,56 @@ h3 {
 
 .empty-message {
   max-width: 54ch;
+}
+
+.retrieval-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 8px;
+  overflow: hidden;
+}
+
+.retrieval-form {
+  display: grid;
+  gap: 6px;
+}
+
+.retrieval-form label {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.retrieval-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.retrieval-input-row input {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+  padding: 0 11px;
+}
+
+.retrieval-form button {
+  min-height: 38px;
+  padding: 0 16px;
+}
+
+.retrieval-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .sources-panel {
@@ -555,7 +628,7 @@ input:focus-visible {
   }
 
   .chat-panel {
-    grid-template-rows: auto minmax(76px, 0.7fr) minmax(70px, 0.3fr) auto;
+    grid-template-rows: auto minmax(70px, 0.46fr) minmax(120px, 0.3fr) minmax(70px, 0.24fr) auto;
   }
 
   .panel-heading,
@@ -577,6 +650,11 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .retrieval-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .retrieval-form button,
   .chat-input button {
     width: 100%;
   }

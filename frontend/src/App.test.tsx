@@ -404,6 +404,94 @@ describe('App chat workflow', () => {
     expect(screen.queryByText(/\*\*Operating Rules\*\*/)).toBeNull()
     expect(screen.queryByText(/`AGENTS\.md`/)).toBeNull()
   })
+
+  test('runs a retrieval debug search and renders chunk details', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([
+          {
+            id: 'doc-1',
+            filename: 'rag-notes.md',
+            type: 'md',
+            created_at: '2026-07-24 10:20:00',
+            chunk_count: 4,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/search') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          question: 'RAG 如何工作？',
+          top_k: 5,
+        })
+
+        return makeJsonResponse({
+          query: 'RAG 如何工作？',
+          top_k: 5,
+          results: [
+            {
+              filename: 'rag-notes.md',
+              page: 2,
+              chunk_index: 3,
+              content: '回答前先召回相关片段。',
+              score: 0.8123,
+            },
+          ],
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.selectOptions(screen.getByLabelText('Top-K 来源数量'), '5')
+    await userEvent.type(screen.getByLabelText('检索问题'), 'RAG 如何工作？')
+    await userEvent.click(screen.getByRole('button', { name: '检索' }))
+
+    expect(await screen.findByText('Chunk 3 · 第 2 页 · 相似度 0.812')).toBeTruthy()
+    expect(screen.getAllByText('rag-notes.md').length).toBeGreaterThan(1)
+    expect(screen.getByText('回答前先召回相关片段。')).toBeTruthy()
+  })
+
+  test('shows a retrieval debug error when search fails', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/search') && init?.method === 'POST') {
+        return makeJsonResponse({ detail: '检索失败，请稍后重试' }, 500)
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.type(screen.getByLabelText('检索问题'), 'RAG 如何工作？')
+    await userEvent.click(screen.getByRole('button', { name: '检索' }))
+
+    expect(await screen.findByText('检索失败，请稍后重试')).toBeTruthy()
+  })
 })
 
 describe('App layout constraints', () => {
@@ -459,7 +547,10 @@ describe('App layout constraints', () => {
     expect(appCss).toContain('overflow: hidden;')
     expect(appCss).toContain('grid-template-rows: auto minmax(0, 1fr);')
     expect(appCss).toContain('grid-template-rows: auto auto minmax(0, 1fr);')
-    expect(appCss).toContain('grid-template-rows: auto minmax(0, 1fr) minmax(118px, 0.36fr) auto;')
+    expect(appCss).toContain(
+      'grid-template-rows: auto minmax(0, 0.82fr) minmax(150px, 0.32fr) minmax(100px, 0.26fr) auto;',
+    )
+    expect(appCss).toContain('grid-template-rows: auto auto auto minmax(0, 1fr);')
     expect(appCss).toContain('.chat-panel > .panel-heading')
     expect(appCss).not.toMatch(/\.conversation\s*{[^}]*align-content:\s*end;/s)
   })

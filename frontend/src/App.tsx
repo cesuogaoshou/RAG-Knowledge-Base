@@ -7,6 +7,7 @@ import {
   deleteDocument,
   fetchDocuments,
   fetchHealth,
+  searchDocuments,
   uploadDocument,
   type DocumentSummary,
   type SourceCitation,
@@ -36,6 +37,10 @@ function App() {
   const [chatMessage, setChatMessage] = useState('输入问题后，将基于已上传文档生成回答')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [answerSources, setAnswerSources] = useState<SourceCitation[]>([])
+  const [retrievalQuestion, setRetrievalQuestion] = useState('')
+  const [retrievalStatus, setRetrievalStatus] = useState<LoadingStatus>('idle')
+  const [retrievalMessage, setRetrievalMessage] = useState('输入问题后可查看召回片段')
+  const [retrievalResults, setRetrievalResults] = useState<SourceCitation[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const conversationRef = useRef<HTMLDivElement>(null)
 
@@ -144,6 +149,33 @@ function App() {
     }
   }
 
+  async function handleRetrievalSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const trimmedQuestion = retrievalQuestion.trim()
+    if (!trimmedQuestion) {
+      setRetrievalStatus('error')
+      setRetrievalMessage('请输入检索问题')
+      return
+    }
+
+    setRetrievalStatus('loading')
+    setRetrievalMessage('正在检索相关片段')
+
+    try {
+      const response = await searchDocuments({ question: trimmedQuestion, top_k: topK })
+      setRetrievalResults(response.results)
+      setRetrievalStatus('success')
+      setRetrievalMessage(
+        response.results.length > 0 ? `已召回 ${response.results.length} 个片段` : '没有召回片段',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '检索失败，请稍后重试'
+      setRetrievalStatus('error')
+      setRetrievalMessage(message)
+    }
+  }
+
   async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -187,6 +219,7 @@ function App() {
   }
 
   const canAsk = backendStatus === 'online' && chatStatus !== 'loading'
+  const canSearch = backendStatus === 'online' && retrievalStatus !== 'loading'
 
   return (
     <main className="app-shell">
@@ -322,6 +355,54 @@ function App() {
               {chatMessage}
             </p>
           </div>
+
+          <section className="retrieval-panel" aria-label="检索详情">
+            <div className="retrieval-heading">
+              <h3>检索详情</h3>
+              <span>{retrievalResults.length} 个召回片段</span>
+            </div>
+            <form
+              className="retrieval-form"
+              aria-label="检索文档片段"
+              onSubmit={(event) => void handleRetrievalSubmit(event)}
+            >
+              <label htmlFor="retrieval-question">检索问题</label>
+              <div className="retrieval-input-row">
+                <input
+                  id="retrieval-question"
+                  onChange={(event) => setRetrievalQuestion(event.currentTarget.value)}
+                  placeholder="输入问题查看召回片段"
+                  type="text"
+                  value={retrievalQuestion}
+                />
+                <button disabled={!canSearch} type="submit">
+                  {retrievalStatus === 'loading' ? '检索中' : '检索'}
+                </button>
+              </div>
+            </form>
+            <p className={`retrieval-state ${retrievalStatus}`} aria-live="polite">
+              {retrievalMessage}
+            </p>
+            <div className="retrieval-list">
+              {retrievalResults.length > 0
+                ? retrievalResults.map((result, index) => (
+                    <article
+                      className="retrieval-card"
+                      key={`${result.filename}-${result.page}-${result.chunk_index}-${index}`}
+                    >
+                      <div className="source-meta">
+                        <strong>{result.filename}</strong>
+                        <span>
+                          Chunk {result.chunk_index} · 第 {result.page} 页 · 相似度{' '}
+                          {result.score.toFixed(3)}
+                        </span>
+                      </div>
+                      <p>{result.content}</p>
+                    </article>
+                  ))
+                : null}
+            </div>
+          </section>
 
           <section className="sources-panel" aria-label="回答来源">
             <div className="sources-heading">

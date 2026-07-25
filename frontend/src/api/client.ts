@@ -40,6 +40,12 @@ export type ChatResponse = {
   sources: SourceCitation[]
 }
 
+export type SearchResponse = {
+  query: string
+  top_k: number
+  results: SourceCitation[]
+}
+
 type ChatRequest = {
   question: string
   top_k: number
@@ -125,6 +131,16 @@ export async function fetchDocuments(): Promise<DocumentSummary[]> {
 export async function deleteDocument(documentId: string): Promise<DeleteDocumentResponse> {
   return requestJson<DeleteDocumentResponse>(`/api/documents/${documentId}`, {
     method: 'DELETE',
+  })
+}
+
+export async function searchDocuments(request: ChatRequest): Promise<SearchResponse> {
+  return requestJson<SearchResponse>('/api/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
   })
 }
 
