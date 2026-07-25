@@ -4,6 +4,7 @@ import './App.css'
 import {
   askQuestion,
   apiBaseUrl,
+  deleteDocument,
   fetchDocuments,
   fetchHealth,
   uploadDocument,
@@ -26,6 +27,7 @@ function App() {
   const [documentStatus, setDocumentStatus] = useState<LoadingStatus>('loading')
   const [documentMessage, setDocumentMessage] = useState('正在加载文档列表')
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<LoadingStatus>('idle')
   const [uploadMessage, setUploadMessage] = useState('支持 PDF、TXT、Markdown 文件')
   const [topK, setTopK] = useState(3)
@@ -120,6 +122,25 @@ function App() {
       setUploadMessage(message)
     } finally {
       input.value = ''
+    }
+  }
+
+  async function handleDeleteDocument(document: DocumentSummary) {
+    setDeletingDocumentId(document.id)
+    setDocumentStatus('loading')
+    setDocumentMessage(`正在删除：${document.filename}`)
+
+    try {
+      await deleteDocument(document.id)
+      setDocumentStatus('success')
+      setDocumentMessage(`已删除：${document.filename}`)
+      await loadDocuments()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '删除失败，请稍后重试'
+      setDocumentStatus('error')
+      setDocumentMessage(message)
+    } finally {
+      setDeletingDocumentId(null)
     }
   }
 
@@ -239,6 +260,18 @@ function App() {
                         {document.chunk_count} 个片段 · {document.created_at}
                       </p>
                     </div>
+                    <button
+                      aria-label={`删除 ${document.filename}`}
+                      className="document-delete-button"
+                      disabled={deletingDocumentId === document.id || backendStatus !== 'online'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleDeleteDocument(document)
+                      }}
+                      type="button"
+                    >
+                      {deletingDocumentId === document.id ? '删除中' : '删除'}
+                    </button>
                   </article>
                 ))
               : null}

@@ -131,6 +131,7 @@ h3 {
 }
 
 .secondary-button,
+.document-delete-button,
 .chat-input button {
   min-height: 42px;
   border: 0;
@@ -148,6 +149,7 @@ h3 {
 }
 
 .secondary-button:disabled,
+.document-delete-button:disabled,
 .chat-input button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -159,12 +161,14 @@ h3 {
 }
 
 .secondary-button:hover,
+.document-delete-button:hover,
 .chat-input button:hover {
   background: #1d4ed8;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
 }
 
 .secondary-button:active,
+.document-delete-button:active,
 .chat-input button:active {
   transform: translateY(1px);
 }
@@ -268,6 +272,11 @@ h3 {
   font-weight: 700;
 }
 
+.document-state.loading {
+  color: #d97706;
+  font-weight: 700;
+}
+
 .chat-state {
   justify-self: center;
   padding: 2px 0;
@@ -285,7 +294,7 @@ h3 {
 
 .document-row {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -318,6 +327,28 @@ h3 {
   color: var(--primary);
   font-size: 12px;
   font-weight: 800;
+}
+
+.document-delete-button {
+  min-height: 34px;
+  padding: 0 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.document-delete-button:hover {
+  background: #fecaca;
+  box-shadow: none;
+}
+
+.document-meta {
+  min-width: 0;
+}
+
+.document-meta h3,
+.document-meta p {
+  overflow-wrap: anywhere;
 }
 
 .conversation {

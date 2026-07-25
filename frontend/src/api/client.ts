@@ -22,6 +22,11 @@ export type UploadedDocument = DocumentSummary & {
   }>
 }
 
+export type DeleteDocumentResponse = {
+  id: string
+  deleted: boolean
+}
+
 export type SourceCitation = {
   filename: string
   page: number
@@ -115,6 +120,12 @@ export async function uploadDocument(file: File): Promise<UploadedDocument> {
 
 export async function fetchDocuments(): Promise<DocumentSummary[]> {
   return requestJson<DocumentSummary[]>('/api/documents')
+}
+
+export async function deleteDocument(documentId: string): Promise<DeleteDocumentResponse> {
+  return requestJson<DeleteDocumentResponse>(`/api/documents/${documentId}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {

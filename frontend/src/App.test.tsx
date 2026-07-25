@@ -125,6 +125,91 @@ describe('App document workflow', () => {
     })
   })
 
+  test('deletes a document and refreshes the document list', async () => {
+    let deleted = false
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents/doc-2') && init?.method === 'DELETE') {
+        deleted = true
+        return makeJsonResponse({ id: 'doc-2', deleted: true })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse(
+          deleted
+            ? []
+            : [
+                {
+                  id: 'doc-2',
+                  filename: 'rag-guide.txt',
+                  type: 'txt',
+                  created_at: '2026-07-24 10:22:00',
+                  chunk_count: 2,
+                },
+              ],
+        )
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('rag-guide.txt')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: '删除 rag-guide.txt' }))
+
+    expect(await screen.findByText('还没有上传文档')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/documents/doc-2'),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
+
+  test('shows a delete error and keeps the document when deletion fails', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents/doc-2') && init?.method === 'DELETE') {
+        return makeJsonResponse({ detail: 'Document not found.' }, 404)
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([
+          {
+            id: 'doc-2',
+            filename: 'rag-guide.txt',
+            type: 'txt',
+            created_at: '2026-07-24 10:22:00',
+            chunk_count: 2,
+          },
+        ])
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('rag-guide.txt')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: '删除 rag-guide.txt' }))
+
+    expect(await screen.findByText('Document not found.')).toBeTruthy()
+    expect(screen.getByText('rag-guide.txt')).toBeTruthy()
+  })
+
   test('shows an upload error when the backend rejects the selected file', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockImplementation(async (input, init) => {
