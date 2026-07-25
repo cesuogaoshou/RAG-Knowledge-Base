@@ -4,6 +4,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.chat_service import ChatService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store import ChromaVectorStore
+from app.schemas.search import SearchResult
 
 
 def create_chat_router(
@@ -18,6 +19,16 @@ def create_chat_router(
         query_embedding = embedding_service.embed_texts([request.question])[0]
         sources = vector_store.search(query_embedding=query_embedding, top_k=request.top_k)
         answer = chat_service.answer(question=request.question, sources=sources)
-        return ChatResponse(answer=answer, sources=sources)
+        return ChatResponse(answer=answer, sources=_deduplicate_sources_by_file_page(sources))
 
     return router
+
+
+def _deduplicate_sources_by_file_page(sources: list[SearchResult]) -> list[SearchResult]:
+    deduplicated: dict[tuple[str, int], SearchResult] = {}
+    for source in sources:
+        key = (source.filename, source.page)
+        current = deduplicated.get(key)
+        if current is None or source.score > current.score:
+            deduplicated[key] = source
+    return list(deduplicated.values())

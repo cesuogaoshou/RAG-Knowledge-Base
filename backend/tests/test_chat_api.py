@@ -80,6 +80,44 @@ def test_chat_answers_with_retrieved_sources() -> None:
         shutil.rmtree(workspace, ignore_errors=True)
 
 
+def test_chat_returns_deduplicated_sources_by_file_and_page() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+                chunk_size=30,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "memory.md",
+                    b"RAG project memory rules. RAG project direction. RAG progress log.",
+                    "text/markdown",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        response = client.post("/api/chat", json={"question": "What does RAG memory cover?", "top_k": 3})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(chat_service.last_sources) == 3
+        assert len(body["sources"]) == 1
+        assert body["sources"][0]["filename"] == "memory.md"
+        assert body["sources"][0]["page"] == 1
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
 def test_chat_rejects_blank_question() -> None:
     workspace = _workspace_dir()
     try:

@@ -92,7 +92,7 @@ function App() {
 
   useEffect(() => {
     const conversation = conversationRef.current
-    if (conversation) {
+    if (conversation && chatMessages.length > 0) {
       conversation.scrollTop = conversation.scrollHeight
     }
   }, [chatMessage, chatMessages])
@@ -308,7 +308,7 @@ function App() {
                         第 {source.page} 页 · 相似度 {source.score.toFixed(3)}
                       </span>
                     </div>
-                    <p>{source.content}</p>
+                    <p>{formatSourcePreview(source.content)}</p>
                   </article>
                 ))
               ) : (
@@ -336,6 +336,18 @@ function App() {
       </section>
     </main>
   )
+}
+
+function formatSourcePreview(content: string) {
+  return content
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export default App

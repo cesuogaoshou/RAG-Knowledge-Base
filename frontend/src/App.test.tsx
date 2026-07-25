@@ -124,6 +124,40 @@ describe('App document workflow', () => {
       )
     })
   })
+
+  test('shows an upload error when the backend rejects the selected file', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents/upload') && init?.method === 'POST') {
+        return makeJsonResponse({ detail: '仅支持 PDF、TXT 或 Markdown 文件' }, 400)
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    const fileInput = screen.getByLabelText('选择文档文件')
+    await userEvent.upload(
+      fileInput,
+      new File(['bad file'], 'bad-upload.txt', { type: 'text/plain' }),
+    )
+
+    expect(await screen.findByText('仅支持 PDF、TXT 或 Markdown 文件')).toBeTruthy()
+    expect(screen.getByText('还没有上传文档')).toBeTruthy()
+  })
 })
 
 describe('App chat workflow', () => {
@@ -239,9 +273,102 @@ describe('App chat workflow', () => {
 
     expect(await screen.findByText('请先上传文档后再提问')).toBeTruthy()
   })
+
+  test('renders markdown-heavy source snippets as plain text previews', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat') && init?.method === 'POST') {
+        return makeJsonResponse({
+          answer: 'MEMORY.md 记录项目状态和操作规则。',
+          sources: [
+            {
+              filename: 'MEMORY.md',
+              page: 1,
+              chunk_index: 0,
+              content: '# Project Memory\n\n- **Operating Rules**: update `AGENTS.md` after changes.',
+              score: 0.8123,
+            },
+          ],
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.type(screen.getByLabelText('问题'), 'memory讲了什么')
+    await userEvent.click(screen.getByRole('button', { name: '提问' }))
+
+    expect(
+      await screen.findByText('Project Memory Operating Rules: update AGENTS.md after changes.'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/# Project Memory/)).toBeNull()
+    expect(screen.queryByText(/\*\*Operating Rules\*\*/)).toBeNull()
+    expect(screen.queryByText(/`AGENTS\.md`/)).toBeNull()
+  })
 })
 
 describe('App layout constraints', () => {
+  test('keeps the initial empty conversation aligned to the top', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight',
+    )
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.getAttribute('aria-label') === '问答记录' ? 500 : 0
+      },
+    })
+
+    vi.stubGlobal('fetch', vi.fn())
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    try {
+      render(<App />)
+
+      expect(await screen.findByText('后端已连接')).toBeTruthy()
+      expect(screen.getByLabelText('问答记录').scrollTop).toBe(0)
+    } finally {
+      cleanup()
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight)
+      } else {
+        delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight
+      }
+    }
+  })
+
   test('keeps the workspace fixed to the viewport with internal scroll regions', () => {
     expect(appCss).toContain('height: 100dvh;')
     expect(appCss).toContain('overflow: hidden;')

@@ -32,6 +32,8 @@ The first milestone focuses on the backend RAG loop:
 
 Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
 
+Phase 2 frontend demo flow is in progress. The React app can connect to the local backend, show backend health, list uploaded documents, upload PDF/TXT/Markdown files, submit RAG questions, and render answers with source citations.
+
 ## Backend Development
 
 Create and activate the backend virtual environment:
@@ -61,7 +63,7 @@ Run the API locally:
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Health check:
@@ -115,3 +117,65 @@ Content-Type: application/json
 ```
 
 The chat response includes an LLM-generated answer and the retrieved sources used as context.
+
+## Frontend Development
+
+Install frontend dependencies:
+
+```powershell
+cd frontend
+npm.cmd install
+```
+
+From the repository root, copy the frontend environment example if you need to override the API URL:
+
+```powershell
+Copy-Item frontend\.env.example frontend\.env
+```
+
+By default, the frontend expects the backend at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Run the frontend locally:
+
+```powershell
+cd frontend
+npm.cmd run dev -- --host 127.0.0.1
+```
+
+Open the app:
+
+```text
+http://127.0.0.1:5173/
+```
+
+Run frontend checks:
+
+```powershell
+cd frontend
+npm.cmd run test
+npm.cmd run build
+npm.cmd run lint
+```
+
+## Local Demo Flow
+
+Start the backend first, then start the frontend in a second terminal.
+
+Confirm both services are reachable:
+
+```powershell
+Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing
+Invoke-WebRequest -Uri "http://127.0.0.1:5173/" -UseBasicParsing
+```
+
+For a quick backend upload smoke test, use `curl.exe`:
+
+```powershell
+curl.exe -s -X POST -F "file=@D:\path\to\notes.txt;type=text/plain" "http://127.0.0.1:8000/api/documents/upload"
+```
+
+Then refresh the frontend, confirm the document appears in the document list, ask a question, and check that the answer includes source citations.

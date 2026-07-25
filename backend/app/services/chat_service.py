@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 from app.schemas.search import SearchResult
 
+DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+
 
 class ChatService(Protocol):
     def answer(self, question: str, sources: list[SearchResult]) -> str:
@@ -24,7 +26,7 @@ class DeepSeekChatService:
     ) -> None:
         load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-        self.model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        self.model = model or os.getenv("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
 
@@ -40,6 +42,7 @@ class DeepSeekChatService:
                     "content": (
                         "你是一个文档问答助手。请只根据提供的资料回答问题；"
                         "如果资料中没有答案，请回答“上传的资料中没有找到相关信息”。"
+                        "回答要简洁、自然、便于阅读。"
                     ),
                 },
                 {
@@ -61,7 +64,10 @@ class DeepSeekChatService:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail=f"DeepSeek request failed: {exc}") from exc
+            raise HTTPException(
+                status_code=502,
+                detail="DeepSeek 服务请求失败，请稍后重试或检查模型配置。",
+            ) from exc
 
         data = response.json()
         try:
@@ -86,5 +92,8 @@ def _build_user_prompt(question: str, sources: list[SearchResult]) -> str:
         "回答要求:\n"
         "1. 只基于资料内容回答。\n"
         "2. 不要编造资料中不存在的信息。\n"
-        "3. 回答后简要指出使用了哪些来源。"
+        "3. 用简洁中文回答，优先使用短句和自然段。\n"
+        "4. 不要使用 Markdown 标记，例如 **、#、-、反引号 或代码块。\n"
+        "5. 不要大段复述原文，只总结和回答用户问题。\n"
+        "6. 不要在回答正文中列出来源编号，系统会在引用来源区域展示来源。"
     )
