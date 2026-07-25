@@ -133,6 +133,7 @@ h3 {
 
 .secondary-button,
 .document-delete-button,
+.source-expand-button,
 .retrieval-form button,
 .chat-input button {
   min-height: 42px;
@@ -152,6 +153,7 @@ h3 {
 
 .secondary-button:disabled,
 .document-delete-button:disabled,
+.source-expand-button:disabled,
 .retrieval-form button:disabled,
 .chat-input button:disabled {
   cursor: not-allowed;
@@ -165,6 +167,7 @@ h3 {
 
 .secondary-button:hover,
 .document-delete-button:hover,
+.source-expand-button:hover,
 .retrieval-form button:hover,
 .chat-input button:hover {
   background: #1d4ed8;
@@ -173,6 +176,7 @@ h3 {
 
 .secondary-button:active,
 .document-delete-button:active,
+.source-expand-button:active,
 .retrieval-form button:active,
 .chat-input button:active {
   transform: translateY(1px);
@@ -482,6 +486,43 @@ h3 {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.source-expand-button {
+  width: fit-content;
+  min-height: 32px;
+  padding: 0 10px;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 13px;
+}
+
+.source-expand-button:hover {
+  background: #bae6fd;
+  box-shadow: none;
+}
+
+.source-detail {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.source-detail span {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.source-detail p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .source-empty {

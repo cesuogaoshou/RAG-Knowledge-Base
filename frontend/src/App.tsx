@@ -37,6 +37,7 @@ function App() {
   const [chatMessage, setChatMessage] = useState('输入问题后，将基于已上传文档生成回答')
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [answerSources, setAnswerSources] = useState<SourceCitation[]>([])
+  const [expandedSourceKeys, setExpandedSourceKeys] = useState<Set<string>>(new Set())
   const [retrievalQuestion, setRetrievalQuestion] = useState('')
   const [retrievalStatus, setRetrievalStatus] = useState<LoadingStatus>('idle')
   const [retrievalMessage, setRetrievalMessage] = useState('输入问题后可查看召回片段')
@@ -208,6 +209,7 @@ function App() {
         },
       ])
       setAnswerSources(response.sources)
+      setExpandedSourceKeys(new Set())
       setChatStatus('success')
       setChatMessage('回答已生成')
       setQuestion('')
@@ -411,20 +413,52 @@ function App() {
             </div>
             <div className="source-list">
               {answerSources.length > 0 ? (
-                answerSources.map((source, index) => (
-                  <article
-                    className="source-card"
-                    key={`${source.filename}-${source.page}-${source.chunk_index}-${index}`}
-                  >
-                    <div className="source-meta">
-                      <strong>{source.filename}</strong>
-                      <span>
-                        第 {source.page} 页 · 相似度 {source.score.toFixed(3)}
-                      </span>
-                    </div>
-                    <p>{formatSourcePreview(source.content)}</p>
-                  </article>
-                ))
+                answerSources.map((source, index) => {
+                  const sourceKey = getSourceKey(source, index)
+                  const isExpanded = expandedSourceKeys.has(sourceKey)
+
+                  return (
+                    <article className="source-card" key={sourceKey}>
+                      <div className="source-meta">
+                        <strong>{source.filename}</strong>
+                        <span>
+                          第 {source.page} 页 · 相似度 {source.score.toFixed(3)}
+                        </span>
+                      </div>
+                      <p>{formatSourcePreview(source.content)}</p>
+                      <button
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? '收起' : '展开'} ${source.filename} 第 ${
+                          source.page
+                        } 页 Chunk ${source.chunk_index}`}
+                        className="source-expand-button"
+                        onClick={() => {
+                          setExpandedSourceKeys((currentKeys) => {
+                            const nextKeys = new Set(currentKeys)
+                            if (nextKeys.has(sourceKey)) {
+                              nextKeys.delete(sourceKey)
+                            } else {
+                              nextKeys.add(sourceKey)
+                            }
+                            return nextKeys
+                          })
+                        }}
+                        type="button"
+                      >
+                        {isExpanded ? '收起片段' : '展开片段'}
+                      </button>
+                      {isExpanded ? (
+                        <div className="source-detail">
+                          <span>
+                            Chunk {source.chunk_index} · 第 {source.page} 页 · 相似度{' '}
+                            {source.score.toFixed(3)}
+                          </span>
+                          <p>{source.content}</p>
+                        </div>
+                      ) : null}
+                    </article>
+                  )
+                })
               ) : (
                 <p className="source-empty">完成一次提问后，这里会显示后端返回的来源片段。</p>
               )}
@@ -462,6 +496,10 @@ function formatSourcePreview(content: string) {
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function getSourceKey(source: SourceCitation, index: number) {
+  return `${source.filename}-${source.page}-${source.chunk_index}-${index}`
 }
 
 export default App

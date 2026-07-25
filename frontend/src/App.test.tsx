@@ -403,6 +403,13 @@ describe('App chat workflow', () => {
     expect(screen.queryByText(/# Project Memory/)).toBeNull()
     expect(screen.queryByText(/\*\*Operating Rules\*\*/)).toBeNull()
     expect(screen.queryByText(/`AGENTS\.md`/)).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: '展开 MEMORY.md 第 1 页 Chunk 0' }))
+
+    expect(screen.getByText('Chunk 0 · 第 1 页 · 相似度 0.812')).toBeTruthy()
+    expect(screen.getByText(/# Project Memory/)).toBeTruthy()
+    expect(screen.getByText(/\*\*Operating Rules\*\*/)).toBeTruthy()
+    expect(screen.getByText(/`AGENTS\.md`/)).toBeTruthy()
   })
 
   test('runs a retrieval debug search and renders chunk details', async () => {

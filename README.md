@@ -32,7 +32,7 @@ The first milestone focuses on the backend RAG loop:
 
 Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
 
-Phase 2 frontend demo flow is in progress. The React app can connect to the local backend, show backend health, list uploaded documents, upload PDF/TXT/Markdown files, submit RAG questions, and render answers with source citations.
+Phase 2 frontend demo flow is in progress. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
 ## Backend Development
 
@@ -104,6 +104,13 @@ Content-Type: application/json
 
 The search response includes the query, requested Top-K value, and matching chunks with filename, page number, chunk index, content, and score.
 
+Similarity score direction:
+
+- Current score is calculated as `1 / (1 + chroma_distance)`.
+- Larger scores mean more similar chunks.
+- `/api/chat` currently refuses to answer when no chunks are retrieved or the best retrieved score is below `0.5`.
+- When this guard is triggered, the backend returns `根据当前知识库资料无法确定。` without calling DeepSeek.
+
 Ask a question with retrieved context:
 
 ```text
@@ -117,6 +124,9 @@ Content-Type: application/json
 ```
 
 The chat response includes an LLM-generated answer and the retrieved sources used as context.
+If the retrieved evidence is weak, the backend returns `根据当前知识库资料无法确定。` without calling the LLM.
+
+In the frontend, each answer citation shows a readable preview by default. Expand a citation to inspect the exact chunk index, page, score, and full source text returned by the backend.
 
 ## Frontend Development
 

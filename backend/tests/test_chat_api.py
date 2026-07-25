@@ -25,10 +25,12 @@ class KeywordEmbeddingService:
 
 class FakeChatService:
     def __init__(self) -> None:
+        self.call_count = 0
         self.last_question = ""
         self.last_sources: list[SearchResult] = []
 
     def answer(self, question: str, sources: list[SearchResult]) -> str:
+        self.call_count += 1
         self.last_question = question
         self.last_sources = sources
         return f"RAG answer using {len(sources)} source(s)."
@@ -114,6 +116,67 @@ def test_chat_returns_deduplicated_sources_by_file_and_page() -> None:
         assert len(body["sources"]) == 1
         assert body["sources"][0]["filename"] == "memory.md"
         assert body["sources"][0]["page"] == 1
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_refuses_low_relevance_without_calling_llm() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"RAG retrieves relevant chunks before generation.",
+                    "text/plain",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        response = client.post("/api/chat", json={"question": "How do I improve this recipe?", "top_k": 1})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["answer"] == "根据当前知识库资料无法确定。"
+        assert body["sources"] == []
+        assert chat_service.call_count == 0
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_refuses_when_no_sources_without_calling_llm() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+            )
+        )
+
+        response = client.post("/api/chat", json={"question": "What does the knowledge base say?", "top_k": 1})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["answer"] == "根据当前知识库资料无法确定。"
+        assert body["sources"] == []
+        assert chat_service.call_count == 0
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
 
