@@ -144,6 +144,54 @@ def test_list_documents_returns_uploaded_document_metadata() -> None:
         _remove_tree(upload_dir)
 
 
+def test_delete_document_removes_metadata_file_and_vectors() -> None:
+    upload_dir = _workspace_upload_dir()
+    vector_store_dir = upload_dir / "chroma_db"
+    try:
+        client = _client_with_upload_dir(upload_dir, vector_store_dir=vector_store_dir)
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"RAG stores private context for grounded answers.",
+                    "text/plain",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+        uploaded = upload_response.json()
+        saved_path = Path(uploaded["saved_path"])
+        assert saved_path.exists()
+
+        delete_response = client.delete(f"/api/documents/{uploaded['id']}")
+
+        assert delete_response.status_code == 200
+        assert delete_response.json() == {"id": uploaded["id"], "deleted": True}
+        assert client.get("/api/documents").json() == []
+        assert not saved_path.exists()
+
+        chroma_client = chromadb.PersistentClient(path=str(vector_store_dir))
+        collection = chroma_client.get_collection("document_chunks")
+        stored = collection.get(where={"document_id": uploaded["id"]})
+        assert stored["ids"] == []
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_delete_unknown_document_returns_404() -> None:
+    upload_dir = _workspace_upload_dir()
+    try:
+        client = _client_with_upload_dir(upload_dir)
+
+        response = client.delete("/api/documents/missing-doc")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Document not found."
+    finally:
+        _remove_tree(upload_dir)
+
+
 def test_document_metadata_persists_across_app_restarts() -> None:
     workspace = _workspace_upload_dir()
     metadata_store_path = workspace / "documents.json"

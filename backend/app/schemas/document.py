@@ -14,6 +14,11 @@ class DocumentSummary(BaseModel):
     chunk_count: int
 
 
+class DeletedDocument(BaseModel):
+    id: str
+    deleted: bool
+
+
 class UploadedDocument(BaseModel):
     id: str
     filename: str

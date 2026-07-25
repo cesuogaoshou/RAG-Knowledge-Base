@@ -34,6 +34,9 @@ class ChromaVectorStore:
             ],
         )
 
+    def delete_document(self, document_id: str) -> None:
+        self._collection.delete(where={"document_id": document_id})
+
     def search(self, query_embedding: list[float], top_k: int) -> list[SearchResult]:
         results = self._collection.query(
             query_embeddings=[query_embedding],

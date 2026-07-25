@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
-from app.schemas.document import DocumentSummary, UploadedDocument
+from app.schemas.document import DeletedDocument, DocumentSummary, UploadedDocument
 from app.services.embedding_service import EmbeddingService
 from app.services.document_loader import save_and_parse_document
 from app.services.document_metadata_store import JSONDocumentMetadataStore
@@ -40,4 +40,26 @@ def create_documents_router(
         metadata_store.add_document(document)
         return document
 
+    @router.delete("/{document_id}", response_model=DeletedDocument)
+    def delete_document(document_id: str) -> DeletedDocument:
+        document = metadata_store.get_document(document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        metadata_store.delete_document(document_id)
+        _delete_uploaded_file(upload_dir=upload_dir, document_id=document_id)
+        vector_store.delete_document(document_id)
+        return DeletedDocument(id=document_id, deleted=True)
+
     return router
+
+
+def _delete_uploaded_file(upload_dir: Path, document_id: str) -> None:
+    resolved_upload_dir = upload_dir.resolve()
+    if not resolved_upload_dir.exists():
+        return
+
+    for candidate in resolved_upload_dir.glob(f"{document_id}.*"):
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate.parent == resolved_upload_dir and resolved_candidate.is_file():
+            resolved_candidate.unlink()
