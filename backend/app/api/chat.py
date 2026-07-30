@@ -15,6 +15,7 @@ def create_chat_router(
     vector_store: ChromaVectorStore,
     embedding_service: EmbeddingService,
     chat_service: ChatService,
+    default_top_k: int = 5,
     min_relevance_score: float = DEFAULT_MIN_RELEVANCE_SCORE,
 ) -> APIRouter:
     router = APIRouter(tags=["chat"])
@@ -22,7 +23,8 @@ def create_chat_router(
     @router.post("/api/chat", response_model=ChatResponse)
     def chat(request: ChatRequest) -> ChatResponse:
         query_embedding = embedding_service.embed_texts([request.question])[0]
-        sources = vector_store.search(query_embedding=query_embedding, top_k=request.top_k)
+        top_k = request.top_k if request.top_k is not None else default_top_k
+        sources = vector_store.search(query_embedding=query_embedding, top_k=top_k)
         if _has_insufficient_evidence(sources, min_relevance_score):
             return ChatResponse(answer=INSUFFICIENT_EVIDENCE_ANSWER, sources=[])
 

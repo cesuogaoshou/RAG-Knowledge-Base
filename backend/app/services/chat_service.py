@@ -1,11 +1,9 @@
-import os
-from pathlib import Path
 from typing import Protocol
 
 import httpx
 from fastapi import HTTPException
-from dotenv import load_dotenv
 
+from app.core.config import AppSettings
 from app.schemas.search import SearchResult
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -19,16 +17,19 @@ class ChatService(Protocol):
 class DeepSeekChatService:
     def __init__(
         self,
+        settings: AppSettings | None = None,
         api_key: str | None = None,
         model: str | None = None,
-        base_url: str = "https://api.deepseek.com/chat/completions",
-        timeout_seconds: float = 30.0,
+        base_url: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> None:
-        load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
-        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-        self.model = model or os.getenv("DEEPSEEK_MODEL", DEFAULT_DEEPSEEK_MODEL)
-        self.base_url = base_url
-        self.timeout_seconds = timeout_seconds
+        resolved_settings = settings or AppSettings()
+        self.api_key = api_key or resolved_settings.deepseek_api_key
+        self.model = model or resolved_settings.deepseek_model
+        self.base_url = base_url or resolved_settings.deepseek_base_url
+        self.timeout_seconds = (
+            timeout_seconds if timeout_seconds is not None else resolved_settings.deepseek_timeout_seconds
+        )
 
     def answer(self, question: str, sources: list[SearchResult]) -> str:
         if not self.api_key:

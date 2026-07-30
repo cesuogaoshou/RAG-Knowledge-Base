@@ -53,6 +53,9 @@ Copy-Item backend\.env.example backend\.env
 
 Then set `DEEPSEEK_API_KEY` in `backend\.env` or in your shell environment before calling `/api/chat`.
 
+Backend runtime configuration is centralized in `backend/app/core/config.py`.
+The `.env` file can override storage paths, CORS origins, chunking parameters, the low-relevance threshold, and DeepSeek model settings.
+
 Run tests:
 
 ```powershell
