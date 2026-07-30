@@ -1,10 +1,10 @@
 from typing import Protocol
 
-from app.schemas.document import DocumentSummary, UploadedDocument
+from app.schemas.document import DocumentStatus, DocumentSummary, UploadedDocument
 
 
 class DocumentMetadataStore(Protocol):
-    def list_documents(self) -> list[DocumentSummary]:
+    def list_documents(self, status: DocumentStatus = "indexed") -> list[DocumentSummary]:
         """Return stored document summaries."""
 
     def get_document(self, document_id: str) -> DocumentSummary | None:

@@ -67,6 +67,7 @@ def test_upload_txt_document_saves_file_and_returns_metadata() -> None:
         assert body["text_length"] == len("RAG stores private document context.")
         assert body["page_count"] == 1
         assert body["chunk_count"] == 3
+        assert body["status"] == "indexed"
         assert body["pages"] == [
             {
                 "page": 1,
@@ -138,6 +139,7 @@ def test_list_documents_returns_uploaded_document_metadata() -> None:
                 "type": "txt",
                 "created_at": uploaded["created_at"],
                 "chunk_count": uploaded["chunk_count"],
+                "status": "indexed",
             }
         ]
     finally:

@@ -291,6 +291,9 @@ function App() {
                     <div className="file-type">{document.type.toUpperCase()}</div>
                     <div className="document-meta">
                       <h3>{document.filename}</h3>
+                      <span className={`document-status-badge ${document.status}`}>
+                        {formatDocumentStatus(document.status)}
+                      </span>
                       <p>
                         {document.chunk_count} 个片段 · {document.created_at}
                       </p>
@@ -500,6 +503,17 @@ function formatSourcePreview(content: string) {
 
 function getSourceKey(source: SourceCitation, index: number) {
   return `${source.filename}-${source.page}-${source.chunk_index}-${index}`
+}
+
+function formatDocumentStatus(status: DocumentSummary['status']) {
+  const statusLabels: Record<DocumentSummary['status'], string> = {
+    uploaded: '已上传',
+    indexed: '已索引',
+    failed: '处理失败',
+    deleted: '已删除',
+  }
+
+  return statusLabels[status]
 }
 
 export default App

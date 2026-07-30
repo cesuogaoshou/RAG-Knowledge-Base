@@ -1,4 +1,8 @@
 from pydantic import BaseModel
+from typing import Literal
+
+
+DocumentStatus = Literal["uploaded", "indexed", "failed", "deleted"]
 
 
 class DocumentPage(BaseModel):
@@ -12,6 +16,7 @@ class DocumentSummary(BaseModel):
     type: str
     created_at: str
     chunk_count: int
+    status: DocumentStatus = "indexed"
 
 
 class DeletedDocument(BaseModel):
@@ -24,6 +29,7 @@ class UploadedDocument(BaseModel):
     filename: str
     type: str
     created_at: str
+    status: DocumentStatus = "indexed"
     saved_path: str
     text_length: int
     page_count: int

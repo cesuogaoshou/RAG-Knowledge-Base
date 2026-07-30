@@ -373,6 +373,40 @@ h3 {
   min-width: 0;
 }
 
+.document-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 22px;
+  margin-top: 5px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.document-status-badge.indexed {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.document-status-badge.uploaded {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.document-status-badge.failed,
+.document-status-badge.deleted {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .document-meta h3,
 .document-meta p {
   overflow-wrap: anywhere;

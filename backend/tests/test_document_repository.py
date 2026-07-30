@@ -1,4 +1,5 @@
 from pathlib import Path
+from sqlalchemy import create_engine, inspect, text
 from uuid import uuid4
 
 from app.db.database import create_session_factory, initialize_database
@@ -43,6 +44,7 @@ def test_sql_document_repository_persists_document_metadata_across_instances() -
     assert documents[0].type == "txt"
     assert documents[0].created_at == "2026-07-31T10:00:00Z"
     assert documents[0].chunk_count == 3
+    assert documents[0].status == "indexed"
 
 
 def test_initialize_database_creates_sqlite_parent_directory() -> None:
@@ -72,7 +74,7 @@ def test_sql_document_repository_replaces_existing_document_by_id() -> None:
     assert documents[0].chunk_count == 5
 
 
-def test_sql_document_repository_gets_and_deletes_document() -> None:
+def test_sql_document_repository_marks_deleted_document_and_hides_it_from_active_reads() -> None:
     session_factory = create_session_factory(_database_url())
     initialize_database(session_factory)
     repository = SQLDocumentRepository(session_factory)
@@ -81,9 +83,51 @@ def test_sql_document_repository_gets_and_deletes_document() -> None:
     found = repository.get_document("doc-1")
     deleted = repository.delete_document("doc-1")
     missing = repository.get_document("doc-1")
+    deleted_documents = repository.list_documents(status="deleted")
 
     assert found is not None
     assert found.filename == "notes.txt"
     assert deleted is True
     assert missing is None
+    assert repository.list_documents() == []
+    assert len(deleted_documents) == 1
+    assert deleted_documents[0].id == "doc-1"
+    assert deleted_documents[0].status == "deleted"
     assert repository.delete_document("doc-1") is False
+
+
+def test_initialize_database_adds_status_column_to_existing_documents_table() -> None:
+    workspace = Path(".test-data") / f"sqlite-migrate-status-{uuid4().hex}"
+    workspace.mkdir(parents=True, exist_ok=True)
+    database_path = workspace / "app.db"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE documents ("
+                "id VARCHAR PRIMARY KEY, "
+                "filename VARCHAR NOT NULL, "
+                "type VARCHAR NOT NULL, "
+                "created_at VARCHAR NOT NULL, "
+                "chunk_count INTEGER NOT NULL"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO documents (id, filename, type, created_at, chunk_count) "
+                "VALUES ('legacy-doc', 'legacy.txt', 'txt', '2026-07-31T10:00:00Z', 1)"
+            )
+        )
+
+    session_factory = create_session_factory(database_url)
+    initialize_database(session_factory)
+
+    columns = {column["name"] for column in inspect(session_factory.kw["bind"]).get_columns("documents")}
+    repository = SQLDocumentRepository(session_factory)
+    documents = repository.list_documents()
+
+    assert "status" in columns
+    assert documents[0].id == "legacy-doc"
+    assert documents[0].status == "indexed"

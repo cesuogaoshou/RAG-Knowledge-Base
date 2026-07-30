@@ -10,6 +10,7 @@ export type DocumentSummary = {
   type: string
   created_at: string
   chunk_count: number
+  status: 'uploaded' | 'indexed' | 'failed' | 'deleted'
 }
 
 export type UploadedDocument = DocumentSummary & {

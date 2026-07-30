@@ -46,6 +46,7 @@ describe('App document workflow', () => {
             type: 'md',
             created_at: '2026-07-24 10:20:00',
             chunk_count: 4,
+            status: 'indexed',
           },
         ])
       }
@@ -57,6 +58,7 @@ describe('App document workflow', () => {
 
     expect(await screen.findByText('uploaded-notes.md')).toBeTruthy()
     expect(screen.getByText('4 个片段 · 2026-07-24 10:20:00')).toBeTruthy()
+    expect(screen.getByText('已索引')).toBeTruthy()
   })
 
   test('uploads a selected document and refreshes the document list', async () => {
