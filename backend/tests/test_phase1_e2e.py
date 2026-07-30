@@ -36,7 +36,7 @@ def test_phase1_backend_rag_flow() -> None:
             create_app(
                 upload_dir=workspace / "uploads",
                 vector_store_dir=workspace / "chroma_db",
-                metadata_store_path=workspace / "documents.json",
+                database_url=f"sqlite:///{workspace / 'app.db'}",
                 embedding_service=KeywordEmbeddingService(),
                 chat_service=FakeChatService(),
                 chunk_size=200,

@@ -17,13 +17,13 @@ class FakeEmbeddingService:
 def _client_with_upload_dir(
     upload_dir: Path,
     vector_store_dir: Path | None = None,
-    metadata_store_path: Path | None = None,
+    database_url: str | None = None,
 ) -> TestClient:
     return TestClient(
         create_app(
             upload_dir=upload_dir,
             vector_store_dir=vector_store_dir or upload_dir / "chroma_db",
-            metadata_store_path=metadata_store_path or upload_dir / "documents.json",
+            database_url=database_url or f"sqlite:///{upload_dir / 'app.db'}",
             embedding_service=FakeEmbeddingService(),
             chunk_size=20,
             chunk_overlap=5,
@@ -194,13 +194,13 @@ def test_delete_unknown_document_returns_404() -> None:
 
 def test_document_metadata_persists_across_app_restarts() -> None:
     workspace = _workspace_upload_dir()
-    metadata_store_path = workspace / "documents.json"
+    database_url = f"sqlite:///{workspace / 'app.db'}"
     vector_store_dir = workspace / "chroma_db"
     try:
         first_client = _client_with_upload_dir(
             workspace / "uploads",
             vector_store_dir=vector_store_dir,
-            metadata_store_path=metadata_store_path,
+            database_url=database_url,
         )
         upload_response = first_client.post(
             "/api/documents/upload",
@@ -211,7 +211,7 @@ def test_document_metadata_persists_across_app_restarts() -> None:
         second_client = _client_with_upload_dir(
             workspace / "uploads",
             vector_store_dir=vector_store_dir,
-            metadata_store_path=metadata_store_path,
+            database_url=database_url,
         )
         list_response = second_client.get("/api/documents")
 
@@ -220,6 +220,23 @@ def test_document_metadata_persists_across_app_restarts() -> None:
         assert len(documents) == 1
         assert documents[0]["filename"] == "notes.txt"
         assert documents[0]["chunk_count"] == upload_response.json()["chunk_count"]
+    finally:
+        _remove_tree(workspace)
+
+
+def test_document_metadata_is_stored_in_sqlite_not_json() -> None:
+    workspace = _workspace_upload_dir()
+    try:
+        client = _client_with_upload_dir(workspace / "uploads", database_url=f"sqlite:///{workspace / 'app.db'}")
+
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG stores document metadata in SQLite.", "text/plain")},
+        )
+
+        assert upload_response.status_code == 201
+        assert (workspace / "app.db").exists()
+        assert not (workspace / "documents.json").exists()
     finally:
         _remove_tree(workspace)
 

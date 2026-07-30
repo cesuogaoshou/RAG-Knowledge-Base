@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from app.schemas.document import DeletedDocument, DocumentSummary, UploadedDocument
 from app.services.embedding_service import EmbeddingService
 from app.services.document_loader import save_and_parse_document
-from app.services.document_metadata_store import JSONDocumentMetadataStore
+from app.services.document_metadata_store import DocumentMetadataStore
 from app.services.text_splitter import split_pages_into_chunks
 from app.services.vector_store import ChromaVectorStore
 
@@ -14,7 +14,7 @@ def create_documents_router(
     upload_dir: Path,
     vector_store: ChromaVectorStore,
     embedding_service: EmbeddingService,
-    metadata_store: JSONDocumentMetadataStore,
+    metadata_store: DocumentMetadataStore,
     chunk_size: int = 800,
     chunk_overlap: int = 120,
 ) -> APIRouter:

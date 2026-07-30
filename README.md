@@ -30,7 +30,7 @@ The first milestone focuses on the backend RAG loop:
 
 ## Repository Status
 
-Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers.
+Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers. Document business metadata is stored in local SQLite through SQLAlchemy.
 
 Phase 2 frontend demo flow is in progress. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
@@ -54,7 +54,7 @@ Copy-Item backend\.env.example backend\.env
 Then set `DEEPSEEK_API_KEY` in `backend\.env` or in your shell environment before calling `/api/chat`.
 
 Backend runtime configuration is centralized in `backend/app/core/config.py`.
-The `.env` file can override storage paths, CORS origins, chunking parameters, the low-relevance threshold, and DeepSeek model settings.
+The `.env` file can override the SQLite database URL, storage paths, CORS origins, chunking parameters, the low-relevance threshold, and DeepSeek model settings.
 
 Run tests:
 

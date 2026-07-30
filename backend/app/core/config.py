@@ -22,7 +22,7 @@ class AppSettings(BaseSettings):
 
     upload_dir: Path = Field(default=BACKEND_DIR / "data" / "uploads", alias="RAG_UPLOAD_DIR")
     vector_store_dir: Path = Field(default=BACKEND_DIR / "data" / "chroma_db", alias="RAG_VECTOR_STORE_DIR")
-    metadata_store_path: Path = Field(default=BACKEND_DIR / "data" / "documents.json", alias="RAG_METADATA_STORE_PATH")
+    database_url: str = Field(default=f"sqlite:///{BACKEND_DIR / 'data' / 'app.db'}", alias="RAG_DATABASE_URL")
 
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://127.0.0.1:5173", "http://localhost:5173"],

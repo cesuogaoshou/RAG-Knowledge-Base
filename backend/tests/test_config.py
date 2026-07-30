@@ -45,6 +45,7 @@ def test_app_settings_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("RAG_CORS_ORIGINS", "http://127.0.0.1:5173,http://localhost:4173")
     monkeypatch.setenv("RAG_MIN_RELEVANCE_SCORE", "0.75")
     monkeypatch.setenv("RAG_UPLOAD_DIR", "custom/uploads")
+    monkeypatch.setenv("RAG_DATABASE_URL", "sqlite:///custom/app.db")
 
     settings = AppSettings()
 
@@ -54,6 +55,7 @@ def test_app_settings_reads_environment_overrides(monkeypatch) -> None:
     assert settings.cors_origins == ["http://127.0.0.1:5173", "http://localhost:4173"]
     assert settings.min_relevance_score == 0.75
     assert settings.upload_dir == Path("custom/uploads")
+    assert settings.database_url == "sqlite:///custom/app.db"
 
 
 def test_create_app_uses_centralized_settings() -> None:

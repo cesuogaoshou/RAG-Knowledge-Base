@@ -7,8 +7,10 @@ from app.api.chat import create_chat_router
 from app.api.documents import create_documents_router
 from app.api.search import create_search_router
 from app.core.config import AppSettings
+from app.db.database import create_session_factory, initialize_database
+from app.db.document_repository import SQLDocumentRepository
 from app.services.chat_service import ChatService, DeepSeekChatService
-from app.services.document_metadata_store import JSONDocumentMetadataStore
+from app.services.document_metadata_store import DocumentMetadataStore
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
 from app.services.vector_store import ChromaVectorStore
 
@@ -17,7 +19,8 @@ def create_app(
     settings: AppSettings | None = None,
     upload_dir: Path | None = None,
     vector_store_dir: Path | None = None,
-    metadata_store_path: Path | None = None,
+    database_url: str | None = None,
+    metadata_store: DocumentMetadataStore | None = None,
     vector_store: ChromaVectorStore | None = None,
     embedding_service: EmbeddingService | None = None,
     chat_service: ChatService | None = None,
@@ -44,14 +47,17 @@ def create_app(
         }
 
     resolved_vector_store = vector_store or ChromaVectorStore(vector_store_dir or resolved_settings.vector_store_dir)
-    metadata_store = JSONDocumentMetadataStore(metadata_store_path or resolved_settings.metadata_store_path)
+    resolved_metadata_store = metadata_store or _create_document_repository(
+        database_url=database_url,
+        settings=resolved_settings,
+    )
     resolved_embedding_service = embedding_service or SentenceTransformerEmbeddingService()
     app.include_router(
         create_documents_router(
             upload_dir=upload_dir or resolved_settings.upload_dir,
             vector_store=resolved_vector_store,
             embedding_service=resolved_embedding_service,
-            metadata_store=metadata_store,
+            metadata_store=resolved_metadata_store,
             chunk_size=chunk_size if chunk_size is not None else resolved_settings.chunk_size,
             chunk_overlap=chunk_overlap if chunk_overlap is not None else resolved_settings.chunk_overlap,
         )
@@ -74,6 +80,15 @@ def create_app(
     )
 
     return app
+
+
+def _create_document_repository(
+    database_url: str | None,
+    settings: AppSettings,
+) -> SQLDocumentRepository:
+    session_factory = create_session_factory(database_url or settings.database_url)
+    initialize_database(session_factory)
+    return SQLDocumentRepository(session_factory)
 
 
 app = create_app()
