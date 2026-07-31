@@ -176,6 +176,45 @@ npm.cmd run build
 npm.cmd run lint
 ```
 
+## Docker Compose Demo
+
+Create the backend environment file and set your DeepSeek key:
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
+
+Edit `backend\.env` and replace `DEEPSEEK_API_KEY` with your real key. The Compose setup overrides the runtime storage paths so SQLite, uploaded files, ChromaDB data, and local model cache live in the `rag_backend_data` Docker volume.
+
+Make sure Docker Desktop is running before building or starting the Compose services.
+
+Build the containers:
+
+```powershell
+docker compose build
+```
+
+Start the local Docker demo:
+
+```powershell
+docker compose up
+```
+
+Open the app:
+
+```text
+Frontend: http://127.0.0.1:5173/
+Backend health: http://127.0.0.1:8000/health
+```
+
+Stop the containers:
+
+```powershell
+docker compose down
+```
+
+The first real embedding request can still be slow because `bge-m3` may need to download and load inside the backend container. The model cache is stored in the Docker volume after the first successful load.
+
 ## Local Demo Flow
 
 Start the backend first, then start the frontend in a second terminal.

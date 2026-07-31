@@ -7,7 +7,7 @@
     "dev": "vite --configLoader native",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build --configLoader native --emptyOutDir false",
     "lint": "oxlint",
-    "test": "vitest run --environment jsdom",
+    "test": "vitest run --environment jsdom --configLoader native",
     "preview": "vite preview"
   },
   "dependencies": {
