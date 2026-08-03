@@ -4,9 +4,12 @@ from pathlib import Path
 from app.schemas.search import SearchResult
 from evaluation.evaluate_retrieval import (
     EvaluationCase,
+    EvaluationParameters,
     evaluate_case,
     main,
+    rank_parameter_reports,
     run_evaluation,
+    run_parameter_sweep,
     summarize_results,
 )
 
@@ -183,3 +186,149 @@ def test_main_defaults_to_ignored_root_test_data(monkeypatch, capsys) -> None:
     main([])
 
     assert json.loads(capsys.readouterr().out)["summary"]["case_count"] == 0
+
+
+def test_rank_parameter_reports_orders_by_quality_then_smaller_context() -> None:
+    reports = [
+        {
+            "parameters": {
+                "chunk_size": 800,
+                "chunk_overlap": 120,
+                "top_k": 5,
+                "min_relevance_score": 0.5,
+            },
+            "summary": {
+                "case_count": 4,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 0.75,
+                "refusal_accuracy": 1.0,
+            },
+            "outcomes": [],
+        },
+        {
+            "parameters": {
+                "chunk_size": 500,
+                "chunk_overlap": 80,
+                "top_k": 3,
+                "min_relevance_score": 0.5,
+            },
+            "summary": {
+                "case_count": 4,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 1.0,
+                "refusal_accuracy": 1.0,
+            },
+            "outcomes": [],
+        },
+    ]
+
+    ranked = rank_parameter_reports(reports)
+
+    assert ranked[0]["parameters"]["chunk_size"] == 500
+    assert ranked[0]["summary"]["marker_hit_rate"] == 1.0
+
+
+def test_run_parameter_sweep_evaluates_each_parameter_set(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_evaluation(**kwargs):
+        calls.append(kwargs)
+        return {
+            "summary": {
+                "case_count": 1,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 1.0,
+                "refusal_accuracy": 1.0,
+            },
+            "outcomes": [],
+        }
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_evaluation", fake_run_evaluation)
+    parameters = [
+        EvaluationParameters(chunk_size=400, chunk_overlap=0, top_k=3, min_relevance_score=0.5),
+        EvaluationParameters(chunk_size=800, chunk_overlap=120, top_k=5, min_relevance_score=0.45),
+    ]
+
+    report = run_parameter_sweep(
+        cases_path=tmp_path / "cases.json",
+        documents_dir=tmp_path / "documents",
+        vector_store_root=tmp_path / "chroma-sweep",
+        parameters=parameters,
+        embedding_service=KeywordEmbeddingService(),
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["chunk_size"] == 400
+    assert calls[1]["min_relevance_score"] == 0.45
+    assert report["best"]["parameters"]["top_k"] == 3
+    assert len(report["reports"]) == 2
+
+
+def test_run_parameter_sweep_reuses_default_embedding_service(monkeypatch, tmp_path: Path) -> None:
+    created_embeddings: list[object] = []
+    used_embeddings: list[object] = []
+
+    class FakeDefaultEmbeddingService:
+        def __init__(self) -> None:
+            created_embeddings.append(self)
+
+    def fake_run_evaluation(**kwargs):
+        used_embeddings.append(kwargs["embedding_service"])
+        return {
+            "summary": {
+                "case_count": 1,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 1.0,
+                "refusal_accuracy": 1.0,
+            },
+            "outcomes": [],
+        }
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.SentenceTransformerEmbeddingService", FakeDefaultEmbeddingService)
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_evaluation", fake_run_evaluation)
+
+    run_parameter_sweep(
+        cases_path=tmp_path / "cases.json",
+        documents_dir=tmp_path / "documents",
+        vector_store_root=tmp_path / "chroma-sweep",
+        parameters=[
+            EvaluationParameters(chunk_size=400, chunk_overlap=0, top_k=3, min_relevance_score=0.5),
+            EvaluationParameters(chunk_size=800, chunk_overlap=120, top_k=5, min_relevance_score=0.45),
+        ],
+    )
+
+    assert len(created_embeddings) == 1
+    assert used_embeddings == [created_embeddings[0], created_embeddings[0]]
+
+
+def test_main_runs_parameter_sweep_when_multiple_values_are_passed(monkeypatch, capsys, tmp_path: Path) -> None:
+    captured_parameters: list[EvaluationParameters] = []
+
+    def fake_run_parameter_sweep(**kwargs):
+        captured_parameters.extend(kwargs["parameters"])
+        return {"best": None, "reports": []}
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_parameter_sweep", fake_run_parameter_sweep)
+
+    main(
+        [
+            "--cases",
+            str(tmp_path / "cases.json"),
+            "--documents",
+            str(tmp_path / "documents"),
+            "--vector-store",
+            str(tmp_path / "chroma"),
+            "--chunk-sizes",
+            "400,800",
+            "--chunk-overlaps",
+            "0,120",
+            "--top-ks",
+            "3,5",
+            "--min-relevance-scores",
+            "0.45,0.5",
+        ]
+    )
+
+    assert len(captured_parameters) == 16
+    assert captured_parameters[0] == EvaluationParameters(400, 0, 3, 0.45)
+    assert json.loads(capsys.readouterr().out)["reports"] == []

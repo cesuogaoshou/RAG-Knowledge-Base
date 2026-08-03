@@ -148,6 +148,17 @@ The report includes:
 - `marker_hit_rate`: whether the expected evidence text appeared in retrieved chunks.
 - `refusal_accuracy`: whether unrelated questions are correctly treated as insufficient evidence.
 
+Run a small retrieval parameter sweep:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --chunk-sizes 400,800,1200 --chunk-overlaps 0,80,120 --top-ks 3,5 --min-relevance-scores 0.45,0.5,0.55
+```
+
+The sweep ranks configurations by source hit rate, marker hit rate, refusal accuracy, then smaller `top_k` and `chunk_size` for a leaner context.
+
+On the current small Phase 4.1 fixture, the best measured configuration was `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`. Because the fixture is intentionally small, this is a tuning signal rather than a universal production default.
+
 ## Frontend Development
 
 Install frontend dependencies:

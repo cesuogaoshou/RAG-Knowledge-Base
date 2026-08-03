@@ -35,6 +35,14 @@ class EvaluationOutcome:
     refusal_correct: bool
 
 
+@dataclass(frozen=True)
+class EvaluationParameters:
+    chunk_size: int
+    chunk_overlap: int
+    top_k: int
+    min_relevance_score: float
+
+
 def load_cases(path: Path) -> list[EvaluationCase]:
     raw_cases = json.loads(path.read_text(encoding="utf-8"))
     return [EvaluationCase(**item) for item in raw_cases]
@@ -82,6 +90,36 @@ def run_evaluation(
     }
 
 
+def run_parameter_sweep(
+    cases_path: Path,
+    documents_dir: Path,
+    vector_store_root: Path,
+    parameters: list[EvaluationParameters],
+    embedding_service: EmbeddingService | None = None,
+) -> dict[str, object]:
+    reports: list[dict[str, object]] = []
+    embeddings = embedding_service or SentenceTransformerEmbeddingService()
+    for index, parameter_set in enumerate(parameters):
+        report = run_evaluation(
+            cases_path=cases_path,
+            documents_dir=documents_dir,
+            vector_store_dir=vector_store_root / f"config-{index}",
+            embedding_service=embeddings,
+            chunk_size=parameter_set.chunk_size,
+            chunk_overlap=parameter_set.chunk_overlap,
+            top_k=parameter_set.top_k,
+            min_relevance_score=parameter_set.min_relevance_score,
+        )
+        report["parameters"] = asdict(parameter_set)
+        reports.append(report)
+
+    ranked = rank_parameter_reports(reports)
+    return {
+        "best": ranked[0] if ranked else None,
+        "reports": ranked,
+    }
+
+
 def evaluate_case(
     case: EvaluationCase,
     results: list[SearchResult],
@@ -118,6 +156,10 @@ def summarize_results(outcomes: list[EvaluationOutcome]) -> dict[str, float | in
     }
 
 
+def rank_parameter_reports(reports: list[dict[str, object]]) -> list[dict[str, object]]:
+    return sorted(reports, key=_ranking_key, reverse=True)
+
+
 def _source_hit(case: EvaluationCase, results: list[SearchResult]) -> bool:
     if case.expected_filename is None:
         return True
@@ -134,6 +176,44 @@ def _marker_hit(case: EvaluationCase, results: list[SearchResult]) -> bool:
 def _rate(values: Iterable[bool]) -> float:
     items = list(values)
     return sum(1 for item in items if item) / len(items)
+
+
+def _ranking_key(report: dict[str, object]) -> tuple[float, float, float, int, int]:
+    summary = report["summary"]
+    parameters = report["parameters"]
+    if not isinstance(summary, dict) or not isinstance(parameters, dict):
+        raise TypeError("report must include summary and parameters dictionaries")
+    return (
+        float(summary["source_hit_rate"]),
+        float(summary["marker_hit_rate"]),
+        float(summary["refusal_accuracy"]),
+        -int(parameters["top_k"]),
+        -int(parameters["chunk_size"]),
+    )
+
+
+def _parse_int_list(value: str) -> list[int]:
+    return [int(item.strip()) for item in value.split(",") if item.strip()]
+
+
+def _parse_float_list(value: str) -> list[float]:
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
+
+
+def _build_parameter_grid(
+    chunk_sizes: list[int],
+    chunk_overlaps: list[int],
+    top_ks: list[int],
+    min_relevance_scores: list[float],
+) -> list[EvaluationParameters]:
+    return [
+        EvaluationParameters(chunk_size, chunk_overlap, top_k, min_relevance_score)
+        for chunk_size in chunk_sizes
+        for chunk_overlap in chunk_overlaps
+        if chunk_overlap < chunk_size
+        for top_k in top_ks
+        for min_relevance_score in min_relevance_scores
+    ]
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -155,7 +235,27 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--min-relevance-score", type=float, default=0.5)
+    parser.add_argument("--chunk-sizes", default=None)
+    parser.add_argument("--chunk-overlaps", default=None)
+    parser.add_argument("--top-ks", default=None)
+    parser.add_argument("--min-relevance-scores", default=None)
     args = parser.parse_args(argv)
+
+    if args.chunk_sizes or args.chunk_overlaps or args.top_ks or args.min_relevance_scores:
+        parameters = _build_parameter_grid(
+            chunk_sizes=_parse_int_list(args.chunk_sizes or str(args.top_k)),
+            chunk_overlaps=_parse_int_list(args.chunk_overlaps or "120"),
+            top_ks=_parse_int_list(args.top_ks or str(args.top_k)),
+            min_relevance_scores=_parse_float_list(args.min_relevance_scores or str(args.min_relevance_score)),
+        )
+        report = run_parameter_sweep(
+            cases_path=args.cases,
+            documents_dir=args.documents,
+            vector_store_root=args.vector_store,
+            parameters=parameters,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     report = run_evaluation(
         cases_path=args.cases,
