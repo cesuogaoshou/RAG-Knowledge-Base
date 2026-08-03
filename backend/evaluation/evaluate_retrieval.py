@@ -4,8 +4,9 @@ import argparse
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import re
 import shutil
-from typing import Iterable
+from typing import Iterable, Protocol
 
 from app.schemas.search import SearchResult
 from app.services.document_loader import parse_document
@@ -43,6 +44,21 @@ class EvaluationParameters:
     min_relevance_score: float
 
 
+class Reranker(Protocol):
+    def rerank(self, question: str, results: list[SearchResult]) -> list[SearchResult]:
+        pass
+
+
+class KeywordOverlapReranker:
+    def rerank(self, question: str, results: list[SearchResult]) -> list[SearchResult]:
+        query_terms = _tokenize_for_reranking(question)
+        return sorted(
+            results,
+            key=lambda result: (_overlap_count(query_terms, result.content), result.score),
+            reverse=True,
+        )
+
+
 def load_cases(path: Path) -> list[EvaluationCase]:
     raw_cases = json.loads(path.read_text(encoding="utf-8"))
     return [EvaluationCase(**item) for item in raw_cases]
@@ -53,10 +69,12 @@ def run_evaluation(
     documents_dir: Path,
     vector_store_dir: Path,
     embedding_service: EmbeddingService | None = None,
-    chunk_size: int = 800,
-    chunk_overlap: int = 120,
-    top_k: int = 5,
-    min_relevance_score: float = 0.5,
+    chunk_size: int = 400,
+    chunk_overlap: int = 0,
+    top_k: int = 3,
+    min_relevance_score: float = 0.45,
+    initial_top_k: int | None = None,
+    reranker: Reranker | None = None,
 ) -> dict[str, object]:
     if vector_store_dir.exists():
         shutil.rmtree(vector_store_dir)
@@ -81,7 +99,8 @@ def run_evaluation(
     outcomes: list[EvaluationOutcome] = []
     for case in cases:
         query_embedding = embeddings.embed_texts([case.question])[0]
-        results = vector_store.search(query_embedding=query_embedding, top_k=top_k)
+        retrieved_results = vector_store.search(query_embedding=query_embedding, top_k=initial_top_k or top_k)
+        results = reranker.rerank(case.question, retrieved_results)[:top_k] if reranker else retrieved_results
         outcomes.append(evaluate_case(case, results, min_relevance_score=min_relevance_score))
 
     return {
@@ -117,6 +136,50 @@ def run_parameter_sweep(
     return {
         "best": ranked[0] if ranked else None,
         "reports": ranked,
+    }
+
+
+def run_reranker_comparison(
+    cases_path: Path,
+    documents_dir: Path,
+    vector_store_root: Path,
+    chunk_size: int = 400,
+    chunk_overlap: int = 0,
+    top_k: int = 3,
+    min_relevance_score: float = 0.45,
+    initial_top_k: int = 5,
+    embedding_service: EmbeddingService | None = None,
+) -> dict[str, object]:
+    embeddings = embedding_service or SentenceTransformerEmbeddingService()
+    baseline = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "baseline",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        reranker=None,
+    )
+    reranked = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "reranked",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        initial_top_k=initial_top_k,
+        reranker=KeywordOverlapReranker(),
+    )
+    delta = _summary_delta(baseline["summary"], reranked["summary"])
+    return {
+        "baseline": baseline,
+        "reranked": reranked,
+        "delta": delta,
+        "recommendation": _reranker_recommendation(delta),
     }
 
 
@@ -178,6 +241,30 @@ def _rate(values: Iterable[bool]) -> float:
     return sum(1 for item in items if item) / len(items)
 
 
+def _summary_delta(baseline: object, reranked: object) -> dict[str, float]:
+    if not isinstance(baseline, dict) or not isinstance(reranked, dict):
+        raise TypeError("baseline and reranked summaries must be dictionaries")
+    return {
+        metric: float(reranked[metric]) - float(baseline[metric])
+        for metric in ("source_hit_rate", "marker_hit_rate", "refusal_accuracy")
+    }
+
+
+def _reranker_recommendation(delta: dict[str, float]) -> str:
+    values = list(delta.values())
+    if any(value > 0 for value in values) and all(value >= 0 for value in values):
+        return "consider_reranker"
+    return "keep_retrieval_only"
+
+
+def _tokenize_for_reranking(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", text.lower()) if len(token.strip()) > 0}
+
+
+def _overlap_count(query_terms: set[str], content: str) -> int:
+    return len(query_terms.intersection(_tokenize_for_reranking(content)))
+
+
 def _ranking_key(report: dict[str, object]) -> tuple[float, float, float, int, int]:
     summary = report["summary"]
     parameters = report["parameters"]
@@ -233,13 +320,27 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=Path(__file__).resolve().parents[2] / ".test-data" / "rag-evaluation-chroma",
     )
-    parser.add_argument("--top-k", type=int, default=5)
-    parser.add_argument("--min-relevance-score", type=float, default=0.5)
+    parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--min-relevance-score", type=float, default=0.45)
+    parser.add_argument("--initial-top-k", type=int, default=5)
     parser.add_argument("--chunk-sizes", default=None)
     parser.add_argument("--chunk-overlaps", default=None)
     parser.add_argument("--top-ks", default=None)
     parser.add_argument("--min-relevance-scores", default=None)
+    parser.add_argument("--compare-reranker", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.compare_reranker:
+        report = run_reranker_comparison(
+            cases_path=args.cases,
+            documents_dir=args.documents,
+            vector_store_root=args.vector_store,
+            top_k=args.top_k,
+            min_relevance_score=args.min_relevance_score,
+            initial_top_k=args.initial_top_k,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     if args.chunk_sizes or args.chunk_overlaps or args.top_ks or args.min_relevance_scores:
         parameters = _build_parameter_grid(

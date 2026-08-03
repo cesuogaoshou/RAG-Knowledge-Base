@@ -161,6 +161,15 @@ The current expanded fixture has 15 cases covering upload chunking, low-evidence
 
 On this expanded fixture, the best measured configuration is `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`, with source hit rate, marker hit rate, and refusal accuracy all at `1.0`. These values are now the backend defaults and can still be overridden with `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_DEFAULT_TOP_K`, and `RAG_MIN_RELEVANCE_SCORE`.
 
+Run a retrieval-only versus reranked comparison:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-reranker --top-k 3 --initial-top-k 5
+```
+
+The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 15-case fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow.
+
 ## Frontend Development
 
 Install frontend dependencies:

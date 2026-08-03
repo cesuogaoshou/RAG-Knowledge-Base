@@ -5,12 +5,14 @@ from app.schemas.search import SearchResult
 from evaluation.evaluate_retrieval import (
     EvaluationCase,
     EvaluationParameters,
+    KeywordOverlapReranker,
     evaluate_case,
     load_cases,
     main,
     rank_parameter_reports,
     run_evaluation,
     run_parameter_sweep,
+    run_reranker_comparison,
     summarize_results,
 )
 
@@ -326,6 +328,70 @@ def test_run_parameter_sweep_reuses_default_embedding_service(monkeypatch, tmp_p
     assert used_embeddings == [created_embeddings[0], created_embeddings[0]]
 
 
+def test_keyword_overlap_reranker_prioritizes_query_terms() -> None:
+    reranker = KeywordOverlapReranker()
+    results = [
+        SearchResult(
+            filename="deployment_notes.md",
+            page=1,
+            chunk_index=0,
+            content="Docker Compose exposes local ports for the demo.",
+            score=0.95,
+        ),
+        SearchResult(
+            filename="phase3_hardening.md",
+            page=1,
+            chunk_index=0,
+            content="Normal document list and repository reads hide deleted status records.",
+            score=0.7,
+        ),
+    ]
+
+    reranked = reranker.rerank("How does the app hide deleted documents from normal reads?", results)
+
+    assert reranked[0].filename == "phase3_hardening.md"
+
+
+def test_run_reranker_comparison_reports_metric_deltas(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_evaluation(**kwargs):
+        calls.append(kwargs)
+        summary = {
+            "case_count": 2,
+            "source_hit_rate": 1.0,
+            "marker_hit_rate": 1.0,
+            "refusal_accuracy": 1.0,
+        }
+        return {"summary": summary, "outcomes": []}
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_evaluation", fake_run_evaluation)
+
+    report = run_reranker_comparison(
+        cases_path=tmp_path / "cases.json",
+        documents_dir=tmp_path / "documents",
+        vector_store_root=tmp_path / "chroma-reranker",
+        chunk_size=400,
+        chunk_overlap=0,
+        top_k=3,
+        min_relevance_score=0.45,
+        initial_top_k=5,
+        embedding_service=KeywordEmbeddingService(),
+    )
+
+    assert calls[0]["top_k"] == 3
+    assert calls[0]["reranker"] is None
+    assert calls[1]["top_k"] == 3
+    assert calls[1]["initial_top_k"] == 5
+    assert isinstance(calls[1]["reranker"], KeywordOverlapReranker)
+    assert report["delta"] == {
+        "source_hit_rate": 0.0,
+        "marker_hit_rate": 0.0,
+        "refusal_accuracy": 0.0,
+    }
+    assert report["recommendation"] == "keep_retrieval_only"
+
+
 def test_main_runs_parameter_sweep_when_multiple_values_are_passed(monkeypatch, capsys, tmp_path: Path) -> None:
     captured_parameters: list[EvaluationParameters] = []
 
@@ -357,3 +423,35 @@ def test_main_runs_parameter_sweep_when_multiple_values_are_passed(monkeypatch, 
     assert len(captured_parameters) == 16
     assert captured_parameters[0] == EvaluationParameters(400, 0, 3, 0.45)
     assert json.loads(capsys.readouterr().out)["reports"] == []
+
+
+def test_main_runs_reranker_comparison(monkeypatch, capsys, tmp_path: Path) -> None:
+    def fake_run_reranker_comparison(**kwargs):
+        assert kwargs["top_k"] == 3
+        assert kwargs["initial_top_k"] == 5
+        return {
+            "baseline": {"summary": {"case_count": 0}, "outcomes": []},
+            "reranked": {"summary": {"case_count": 0}, "outcomes": []},
+            "delta": {},
+            "recommendation": "keep_retrieval_only",
+        }
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_reranker_comparison", fake_run_reranker_comparison)
+
+    main(
+        [
+            "--cases",
+            str(tmp_path / "cases.json"),
+            "--documents",
+            str(tmp_path / "documents"),
+            "--vector-store",
+            str(tmp_path / "chroma"),
+            "--compare-reranker",
+            "--top-k",
+            "3",
+            "--initial-top-k",
+            "5",
+        ]
+    )
+
+    assert json.loads(capsys.readouterr().out)["recommendation"] == "keep_retrieval_only"
