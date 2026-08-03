@@ -6,6 +6,7 @@ from evaluation.evaluate_retrieval import (
     EvaluationCase,
     EvaluationParameters,
     evaluate_case,
+    load_cases,
     main,
     rank_parameter_reports,
     run_evaluation,
@@ -139,6 +140,24 @@ def test_run_evaluation_returns_summary_for_fixture_documents(tmp_path: Path) ->
     assert report["summary"]["case_count"] == 1
     assert report["summary"]["source_hit_rate"] == 1.0
     assert report["outcomes"][0]["id"] == "rag"
+
+
+def test_default_evaluation_fixture_covers_core_project_behaviors() -> None:
+    cases = load_cases(Path(__file__).parents[1] / "evaluation" / "fixtures" / "cases.json")
+    case_ids = {case.id for case in cases}
+    filenames = {case.expected_filename for case in cases if case.expected_filename is not None}
+
+    assert len(cases) >= 8
+    assert {
+        "rag_upload_chunking",
+        "sqlite_deleted_documents_hidden",
+        "frontend_retrieval_debug_panel",
+        "unrelated_weather",
+    }.issubset(case_ids)
+    assert {"rag_baseline.md", "deployment_notes.md", "phase3_hardening.md", "frontend_behavior.md"}.issubset(
+        filenames
+    )
+    assert sum(1 for case in cases if case.expect_refusal) >= 2
 
 
 def test_main_prints_json_report(monkeypatch, capsys, tmp_path: Path) -> None:

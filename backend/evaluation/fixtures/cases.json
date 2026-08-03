@@ -21,8 +21,50 @@
     "expect_refusal": false
   },
   {
+    "id": "configuration_management",
+    "question": "后端集中配置管理包含哪些运行参数？",
+    "expected_filename": "phase3_hardening.md",
+    "expected_marker": "AppSettings configuration",
+    "expect_refusal": false
+  },
+  {
+    "id": "sqlite_document_metadata",
+    "question": "项目现在用什么保存业务文档元数据？",
+    "expected_filename": "phase3_hardening.md",
+    "expected_marker": "SQLAlchemy",
+    "expect_refusal": false
+  },
+  {
+    "id": "sqlite_deleted_documents_hidden",
+    "question": "删除后的文档为什么不会继续出现在列表和检索里？",
+    "expected_filename": "phase3_hardening.md",
+    "expected_marker": "hide deleted status records",
+    "expect_refusal": false
+  },
+  {
+    "id": "frontend_retrieval_debug_panel",
+    "question": "前端如何展示检索阶段的证据？",
+    "expected_filename": "frontend_behavior.md",
+    "expected_marker": "retrieval debug panel",
+    "expect_refusal": false
+  },
+  {
+    "id": "frontend_citation_expansion",
+    "question": "答案引用如何查看完整来源片段？",
+    "expected_filename": "frontend_behavior.md",
+    "expected_marker": "expandable source citations",
+    "expect_refusal": false
+  },
+  {
     "id": "unrelated_weather",
     "question": "明天上海天气怎么样？",
+    "expected_filename": null,
+    "expected_marker": null,
+    "expect_refusal": true
+  },
+  {
+    "id": "unrelated_recipe",
+    "question": "空气炸锅烤鸡翅需要多少分钟？",
     "expected_filename": null,
     "expected_marker": null,
     "expect_refusal": true
