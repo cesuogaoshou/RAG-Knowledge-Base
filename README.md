@@ -133,6 +133,21 @@ If the retrieved evidence is weak, the backend returns `根据当前知识库资
 
 In the frontend, each answer citation shows a readable preview by default. Expand a citation to inspect the exact chunk index, page, score, and full source text returned by the backend.
 
+## RAG Evaluation
+
+Run the offline retrieval baseline:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval
+```
+
+The report includes:
+
+- `source_hit_rate`: whether the expected source file appeared in retrieved results.
+- `marker_hit_rate`: whether the expected evidence text appeared in retrieved chunks.
+- `refusal_accuracy`: whether unrelated questions are correctly treated as insufficient evidence.
+
 ## Frontend Development
 
 Install frontend dependencies:

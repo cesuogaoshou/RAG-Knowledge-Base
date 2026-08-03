@@ -1,0 +1,30 @@
+[
+  {
+    "id": "rag_upload_chunking",
+    "question": "这个项目上传文档后如何进入向量库？",
+    "expected_filename": "rag_baseline.md",
+    "expected_marker": "split into overlapping chunks",
+    "expect_refusal": false
+  },
+  {
+    "id": "low_relevance_refusal",
+    "question": "资料不足时聊天接口应该怎么处理？",
+    "expected_filename": "rag_baseline.md",
+    "expected_marker": "insufficient-evidence",
+    "expect_refusal": false
+  },
+  {
+    "id": "docker_compose_ports",
+    "question": "Docker Compose 本地演示暴露哪些端口？",
+    "expected_filename": "deployment_notes.md",
+    "expected_marker": "port 8000",
+    "expect_refusal": false
+  },
+  {
+    "id": "unrelated_weather",
+    "question": "明天上海天气怎么样？",
+    "expected_filename": null,
+    "expected_marker": null,
+    "expect_refusal": true
+  }
+]

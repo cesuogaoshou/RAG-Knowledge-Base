@@ -44,6 +44,10 @@ async def save_and_parse_document(file: UploadFile, upload_dir: Path) -> Uploade
     )
 
 
+def parse_document(path: Path) -> list[DocumentPage]:
+    return _parse_document(path, path.suffix.lower())
+
+
 def _parse_document(path: Path, extension: str) -> list[DocumentPage]:
     if extension == ".pdf":
         return _parse_pdf(path)
