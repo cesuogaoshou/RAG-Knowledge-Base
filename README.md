@@ -157,9 +157,9 @@ cd backend
 
 The sweep ranks configurations by source hit rate, marker hit rate, refusal accuracy, then smaller `top_k` and `chunk_size` for a leaner context.
 
-The current expanded fixture has 10 cases covering upload chunking, low-evidence refusal, Docker demo notes, Phase 3 configuration/SQLite lifecycle behavior, frontend retrieval evidence, citation expansion, and unrelated-question refusal.
+The current expanded fixture has 15 cases covering upload chunking, low-evidence refusal, Docker demo notes, Phase 3 configuration/SQLite lifecycle behavior, frontend retrieval evidence, citation expansion, roadmap boundaries, an English lifecycle question, and unrelated-question refusal.
 
-On this expanded fixture, the best measured configuration is still `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`, with source hit rate, marker hit rate, and refusal accuracy all at `1.0`. This is stronger evidence than the initial 4-case fixture, but still a local evaluation signal rather than an automatic production default change.
+On this expanded fixture, the best measured configuration is still `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`, with source hit rate, marker hit rate, and refusal accuracy all at `1.0`. This is stronger evidence than the initial 4-case and 10-case fixtures, but still a local evaluation signal rather than an automatic production default change.
 
 ## Frontend Development
 

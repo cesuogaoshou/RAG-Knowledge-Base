@@ -56,6 +56,34 @@
     "expect_refusal": false
   },
   {
+    "id": "reranker_deferred_until_evaluation",
+    "question": "为什么现在还不应该直接加 reranker？",
+    "expected_filename": "roadmap_boundaries.md",
+    "expected_marker": "measured instead of guessed",
+    "expect_refusal": false
+  },
+  {
+    "id": "qdrant_deferred_after_chromadb",
+    "question": "Qdrant 迁移应该在哪个阶段考虑？",
+    "expected_filename": "roadmap_boundaries.md",
+    "expected_marker": "production-style enhancement phase",
+    "expect_refusal": false
+  },
+  {
+    "id": "docker_troubleshooting_paused",
+    "question": "为什么现在不继续排查 Docker runtime build？",
+    "expected_filename": "roadmap_boundaries.md",
+    "expected_marker": "Docker Hub authentication",
+    "expect_refusal": false
+  },
+  {
+    "id": "english_question_sqlite_lifecycle",
+    "question": "How does the app hide deleted documents from normal reads?",
+    "expected_filename": "phase3_hardening.md",
+    "expected_marker": "hide deleted status records",
+    "expect_refusal": false
+  },
+  {
     "id": "unrelated_weather",
     "question": "明天上海天气怎么样？",
     "expected_filename": null,
@@ -65,6 +93,13 @@
   {
     "id": "unrelated_recipe",
     "question": "空气炸锅烤鸡翅需要多少分钟？",
+    "expected_filename": null,
+    "expected_marker": null,
+    "expect_refusal": true
+  },
+  {
+    "id": "unrelated_stock_price",
+    "question": "今天英伟达股价会涨吗？",
     "expected_filename": null,
     "expected_marker": null,
     "expect_refusal": true

@@ -147,17 +147,23 @@ def test_default_evaluation_fixture_covers_core_project_behaviors() -> None:
     case_ids = {case.id for case in cases}
     filenames = {case.expected_filename for case in cases if case.expected_filename is not None}
 
-    assert len(cases) >= 8
+    assert len(cases) >= 14
     assert {
         "rag_upload_chunking",
         "sqlite_deleted_documents_hidden",
         "frontend_retrieval_debug_panel",
+        "reranker_deferred_until_evaluation",
+        "english_question_sqlite_lifecycle",
         "unrelated_weather",
     }.issubset(case_ids)
-    assert {"rag_baseline.md", "deployment_notes.md", "phase3_hardening.md", "frontend_behavior.md"}.issubset(
-        filenames
-    )
-    assert sum(1 for case in cases if case.expect_refusal) >= 2
+    assert {
+        "rag_baseline.md",
+        "deployment_notes.md",
+        "phase3_hardening.md",
+        "frontend_behavior.md",
+        "roadmap_boundaries.md",
+    }.issubset(filenames)
+    assert sum(1 for case in cases if case.expect_refusal) >= 3
 
 
 def test_main_prints_json_report(monkeypatch, capsys, tmp_path: Path) -> None:
