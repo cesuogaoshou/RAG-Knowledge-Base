@@ -58,6 +58,15 @@ def test_app_settings_reads_environment_overrides(monkeypatch) -> None:
     assert settings.database_url == "sqlite:///custom/app.db"
 
 
+def test_app_settings_uses_tuned_retrieval_defaults() -> None:
+    settings = AppSettings()
+
+    assert settings.chunk_size == 400
+    assert settings.chunk_overlap == 0
+    assert settings.default_top_k == 3
+    assert settings.min_relevance_score == 0.45
+
+
 def test_create_app_uses_centralized_settings() -> None:
     chat_service = FakeChatService()
     vector_store = FakeVectorStore()

@@ -33,10 +33,10 @@ class AppSettings(BaseSettings):
         alias="RAG_CORS_METHODS",
     )
 
-    chunk_size: int = Field(default=800, alias="RAG_CHUNK_SIZE", ge=1)
-    chunk_overlap: int = Field(default=120, alias="RAG_CHUNK_OVERLAP", ge=0)
-    default_top_k: int = Field(default=5, alias="RAG_DEFAULT_TOP_K", ge=1, le=20)
-    min_relevance_score: float = Field(default=0.5, alias="RAG_MIN_RELEVANCE_SCORE", ge=0.0)
+    chunk_size: int = Field(default=400, alias="RAG_CHUNK_SIZE", ge=1)
+    chunk_overlap: int = Field(default=0, alias="RAG_CHUNK_OVERLAP", ge=0)
+    default_top_k: int = Field(default=3, alias="RAG_DEFAULT_TOP_K", ge=1, le=20)
+    min_relevance_score: float = Field(default=0.45, alias="RAG_MIN_RELEVANCE_SCORE", ge=0.0)
 
     deepseek_api_key: str | None = Field(default=None, alias="DEEPSEEK_API_KEY")
     deepseek_model: str = Field(default="deepseek-v4-flash", alias="DEEPSEEK_MODEL")
