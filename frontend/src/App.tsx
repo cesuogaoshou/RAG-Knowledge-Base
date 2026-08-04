@@ -8,6 +8,7 @@ import {
   fetchDocuments,
   fetchHealth,
   searchDocuments,
+  streamQuestion,
   uploadDocument,
   type DocumentSummary,
   type SourceCitation,
@@ -203,6 +204,7 @@ function App() {
 
     setChatStatus('loading')
     setChatMessage('正在检索文档并生成回答')
+    const answerId = `answer-${Date.now()}`
     setChatMessages((currentMessages) => [
       ...currentMessages,
       {
@@ -210,27 +212,64 @@ function App() {
         role: 'user',
         content: trimmedQuestion,
       },
+      {
+        id: answerId,
+        role: 'assistant',
+        content: '',
+      },
     ])
 
     try {
-      const response = await askQuestion({ question: trimmedQuestion, top_k: topK })
-      setChatMessages((currentMessages) => [
-        ...currentMessages,
+      await streamQuestion(
+        { question: trimmedQuestion, top_k: topK },
         {
-          id: `answer-${Date.now()}`,
-          role: 'assistant',
-          content: response.answer,
+          onToken: (delta) => {
+            setChatMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === answerId
+                  ? {
+                      ...message,
+                      content: `${message.content}${delta}`,
+                    }
+                  : message,
+              ),
+            )
+          },
+          onSources: (sources) => {
+            setAnswerSources(sources)
+          },
         },
-      ])
-      setAnswerSources(response.sources)
+      )
       setExpandedSourceKeys(new Set())
       setChatStatus('success')
       setChatMessage('回答已生成')
       setQuestion('')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '提问失败，请稍后重试'
-      setChatStatus('error')
-      setChatMessage(message)
+    } catch {
+      try {
+        const response = await askQuestion({ question: trimmedQuestion, top_k: topK })
+        setChatMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === answerId
+              ? {
+                  ...message,
+                  content: response.answer,
+                }
+              : message,
+          ),
+        )
+        setAnswerSources(response.sources)
+        setExpandedSourceKeys(new Set())
+        setChatStatus('success')
+        setChatMessage('回答已生成')
+        setQuestion('')
+      } catch (fallbackError) {
+        setChatMessages((currentMessages) =>
+          currentMessages.filter((message) => message.id !== answerId),
+        )
+        const message = fallbackError instanceof Error ? fallbackError.message : '提问失败，请稍后重试'
+        setChatStatus('error')
+        setChatMessage(message)
+      }
     }
   }
 

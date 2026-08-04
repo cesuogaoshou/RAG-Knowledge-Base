@@ -35,6 +35,13 @@ class FakeChatService:
         self.last_sources = sources
         return f"RAG answer using {len(sources)} source(s)."
 
+    def stream_answer(self, question: str, sources: list[SearchResult]):
+        self.call_count += 1
+        self.last_question = question
+        self.last_sources = sources
+        yield "RAG "
+        yield f"stream using {len(sources)} source(s)."
+
 
 def _workspace_dir() -> Path:
     path = Path(".test-data") / f"chat-{uuid4().hex}"
@@ -176,6 +183,94 @@ def test_chat_refuses_when_no_sources_without_calling_llm() -> None:
         body = response.json()
         assert body["answer"] == "根据当前知识库资料无法确定。"
         assert body["sources"] == []
+        assert chat_service.call_count == 0
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_streams_answer_tokens_and_deduplicated_sources() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+                chunk_size=30,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "memory.md",
+                    b"RAG project memory rules. RAG project direction. RAG progress log.",
+                    "text/markdown",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        with client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={"question": "What does RAG memory cover?", "top_k": 3},
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+            body = response.read().decode("utf-8")
+
+        assert 'event: token\ndata: {"delta": "RAG "}' in body
+        assert 'event: token\ndata: {"delta": "stream using 3 source(s)."}' in body
+        assert '"filename": "memory.md"' in body
+        assert body.count('"filename": "memory.md"') == 1
+        assert "event: done\ndata: {}" in body
+        assert chat_service.last_question == "What does RAG memory cover?"
+        assert len(chat_service.last_sources) == 3
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_stream_refuses_low_relevance_without_calling_llm() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "notes.txt",
+                    b"RAG retrieves relevant chunks before generation.",
+                    "text/plain",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        with client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={"question": "How do I improve this recipe?", "top_k": 1},
+        ) as response:
+            assert response.status_code == 200
+            body = response.read().decode("utf-8")
+
+        assert "event: token" in body
+        assert "根据当前知识库资料无法确定。" in body
+        assert "event: sources\ndata: {\"sources\": []}" in body
         assert chat_service.call_count == 0
     finally:
         shutil.rmtree(workspace, ignore_errors=True)

@@ -34,7 +34,7 @@ Phase 1 backend closed loop is complete. The backend currently exposes health ch
 
 Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
-Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has started with lightweight asynchronous document processing.
+Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database.
 
 ## Backend Development
 
@@ -130,6 +130,20 @@ Content-Type: application/json
 
 The chat response includes an LLM-generated answer and the retrieved sources used as context.
 If the retrieved evidence is weak, the backend returns `根据当前知识库资料无法确定。` without calling the LLM.
+
+Stream a question response with Server-Sent Events:
+
+```text
+POST http://127.0.0.1:8000/api/chat/stream
+Content-Type: application/json
+
+{
+  "question": "How does RAG work?",
+  "top_k": 5
+}
+```
+
+The streaming endpoint uses the same retrieval and low-relevance guard as `/api/chat`. It emits `token` events as answer text arrives, then a `sources` event with the final deduplicated citations, followed by a `done` event. The React frontend prefers this streaming endpoint for a more responsive demo and falls back to `/api/chat` if streaming is unavailable.
 
 In the frontend, each answer citation shows a readable preview by default. Expand a citation to inspect the exact chunk index, page, score, and full source text returned by the backend.
 

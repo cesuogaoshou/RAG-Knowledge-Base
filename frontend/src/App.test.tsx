@@ -366,6 +366,79 @@ describe('App chat workflow', () => {
     consoleErrorSpy.mockRestore()
   })
 
+  test('streams a chat answer and renders sources when the stream completes', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/stream') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          question: 'streaming demo',
+          top_k: 3,
+        })
+
+        const encoder = new TextEncoder()
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode('event: token\ndata: {"delta":"第一段"}\n\n'))
+              controller.enqueue(encoder.encode('event: token\ndata: {"delta":"第二段"}\n\n'))
+              controller.enqueue(
+                encoder.encode(
+                  'event: sources\ndata: {"sources":[{"filename":"rag.md","page":1,"chunk_index":0,"content":"stream source","score":0.91}]}\n\n',
+                ),
+              )
+              controller.enqueue(encoder.encode('event: done\ndata: {}\n\n'))
+              controller.close()
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/event-stream',
+            },
+          },
+        )
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/documents'))).toBe(
+        true,
+      )
+    })
+
+    const questionInput = document.querySelector<HTMLInputElement>('#question')
+    expect(questionInput).toBeTruthy()
+    await userEvent.type(questionInput as HTMLInputElement, 'streaming demo')
+
+    const submitButton = questionInput
+      ?.closest('form')
+      ?.querySelector<HTMLButtonElement>('button[type="submit"]')
+    expect(submitButton).toBeTruthy()
+    await userEvent.click(submitButton as HTMLButtonElement)
+
+    expect(await screen.findByText('第一段第二段')).toBeTruthy()
+    expect(screen.getByText('rag.md')).toBeTruthy()
+    expect(screen.getByText('stream source')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/chat/stream'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   test('shows a chat error message when the backend rejects the request', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockImplementation(async (input, init) => {

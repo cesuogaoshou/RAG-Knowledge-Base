@@ -52,6 +52,11 @@ type ChatRequest = {
   top_k: number
 }
 
+type StreamQuestionHandlers = {
+  onToken: (delta: string) => void
+  onSources: (sources: SourceCitation[]) => void
+}
+
 type ApiErrorBody = {
   detail?: unknown
 }
@@ -153,4 +158,81 @@ export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
     },
     body: JSON.stringify(request),
   })
+}
+
+export async function streamQuestion(
+  request: ChatRequest,
+  handlers: StreamQuestionHandlers,
+): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    let message = `请求失败：${response.status}`
+
+    try {
+      const errorBody = (await response.json()) as ApiErrorBody
+      if (typeof errorBody.detail === 'string') {
+        message = errorBody.detail
+      }
+    } catch {
+      // Keep the status-based message when the backend returns a non-JSON error body.
+    }
+
+    throw new ApiError(message, response.status)
+  }
+
+  if (!response.body) {
+    throw new ApiError('浏览器不支持流式响应。', 0)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+    buffer = parseSseBuffer(buffer, handlers)
+  }
+
+  buffer += decoder.decode()
+  parseSseBuffer(`${buffer}\n\n`, handlers)
+}
+
+function parseSseBuffer(buffer: string, handlers: StreamQuestionHandlers): string {
+  const events = buffer.split('\n\n')
+  const remaining = events.pop() ?? ''
+
+  for (const eventBlock of events) {
+    const eventName = eventBlock
+      .split('\n')
+      .find((line) => line.startsWith('event: '))
+      ?.slice('event: '.length)
+      .trim()
+    const dataLine = eventBlock.split('\n').find((line) => line.startsWith('data: '))
+
+    if (!eventName || !dataLine) {
+      continue
+    }
+
+    const data = JSON.parse(dataLine.slice('data: '.length))
+    if (eventName === 'token' && typeof data.delta === 'string') {
+      handlers.onToken(data.delta)
+    }
+    if (eventName === 'sources' && Array.isArray(data.sources)) {
+      handlers.onSources(data.sources as SourceCitation[])
+    }
+  }
+
+  return remaining
 }

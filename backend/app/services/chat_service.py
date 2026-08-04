@@ -1,3 +1,5 @@
+import json
+from collections.abc import Iterator
 from typing import Protocol
 
 import httpx
@@ -7,11 +9,19 @@ from app.core.config import AppSettings
 from app.schemas.search import SearchResult
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+SYSTEM_PROMPT = (
+    "你是一个文档问答助手。请只根据提供的资料回答问题；"
+    "如果资料中没有答案，请回答“上传的资料中没有找到相关信息”。"
+    "回答要简洁、自然、便于阅读。"
+)
 
 
 class ChatService(Protocol):
     def answer(self, question: str, sources: list[SearchResult]) -> str:
         """Generate an answer for a question using retrieved sources."""
+
+    def stream_answer(self, question: str, sources: list[SearchResult]) -> Iterator[str]:
+        """Generate answer chunks for a question using retrieved sources."""
 
 
 class DeepSeekChatService:
@@ -40,11 +50,7 @@ class DeepSeekChatService:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "你是一个文档问答助手。请只根据提供的资料回答问题；"
-                        "如果资料中没有答案，请回答“上传的资料中没有找到相关信息”。"
-                        "回答要简洁、自然、便于阅读。"
-                    ),
+                    "content": SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
@@ -75,6 +81,56 @@ class DeepSeekChatService:
             return str(data["choices"][0]["message"]["content"]).strip()
         except (KeyError, IndexError, TypeError) as exc:
             raise HTTPException(status_code=502, detail="DeepSeek response format is invalid") from exc
+
+    def stream_answer(self, question: str, sources: list[SearchResult]) -> Iterator[str]:
+        if not self.api_key:
+            raise HTTPException(status_code=500, detail="DEEPSEEK_API_KEY is not configured")
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": _build_user_prompt(question, sources),
+                },
+            ],
+            "temperature": 0.2,
+            "stream": True,
+        }
+        try:
+            with httpx.stream(
+                "POST",
+                self.base_url,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self.timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data = line.removeprefix("data: ").strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        content = chunk["choices"][0]["delta"].get("content")
+                    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+                        raise HTTPException(status_code=502, detail="DeepSeek response format is invalid") from exc
+                    if content:
+                        yield str(content)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="DeepSeek 服务请求失败，请稍后重试或检查模型配置。",
+            ) from exc
 
 
 def _build_user_prompt(question: str, sources: list[SearchResult]) -> str:
