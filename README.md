@@ -34,7 +34,7 @@ Phase 1 backend closed loop is complete. The backend currently exposes health ch
 
 Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
-Phase 3 engineering hardening is in progress. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents now carry an explicit lifecycle status.
+Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has started with lightweight asynchronous document processing.
 
 ## Backend Development
 
@@ -85,7 +85,7 @@ Content-Type: multipart/form-data
 file: PDF/TXT/MD
 ```
 
-The upload response includes the generated document id, original filename, saved path, document type, lifecycle status, page count, chunk count, text length, and parsed page text.
+The upload response includes the generated document id, original filename, saved path, document type, and lifecycle status. Uploads are accepted first as `uploaded`; the backend then parses, chunks, embeds, and indexes the saved file in a local FastAPI background task.
 
 List uploaded documents:
 
@@ -93,7 +93,7 @@ List uploaded documents:
 GET http://127.0.0.1:8000/api/documents
 ```
 
-The document list response includes document id, filename, type, created time, chunk count, and lifecycle status. The current synchronous upload flow marks successfully parsed and indexed documents as `indexed`; deleted documents are hidden from the normal list while their SQLite record is marked `deleted`.
+The document list response includes document id, filename, type, created time, chunk count, and lifecycle status. Background processing marks completed documents as `indexed`; processing failures are visible as `failed`; deleted documents are hidden from the normal list while their SQLite record is marked `deleted`.
 
 Search document chunks:
 

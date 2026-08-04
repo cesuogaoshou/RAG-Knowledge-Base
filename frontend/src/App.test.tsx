@@ -82,6 +82,7 @@ describe('App document workflow', () => {
           text_length: 120,
           page_count: 1,
           chunk_count: 2,
+          status: 'uploaded',
           pages: [{ page: 1, text: 'RAG guide' }],
         })
       }
@@ -96,6 +97,7 @@ describe('App document workflow', () => {
                   type: 'txt',
                   created_at: '2026-07-24 10:22:00',
                   chunk_count: 2,
+                  status: 'indexed',
                 },
               ]
             : [],
@@ -115,7 +117,7 @@ describe('App document workflow', () => {
       new File(['RAG guide'], 'rag-guide.txt', { type: 'text/plain' }),
     )
 
-    expect(await screen.findByText('上传完成：rag-guide.txt')).toBeTruthy()
+    expect(await screen.findByText('上传已接收：rag-guide.txt')).toBeTruthy()
     expect(await screen.findByText('rag-guide.txt')).toBeTruthy()
     expect(screen.getByText('2 个片段 · 2026-07-24 10:22:00')).toBeTruthy()
 
@@ -126,6 +128,39 @@ describe('App document workflow', () => {
       )
     })
   })
+
+  test('refreshes uploaded documents until they become indexed', async () => {
+    let listCalls = 0
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        listCalls += 1
+        return makeJsonResponse([
+          {
+            id: 'doc-async',
+            filename: 'async-notes.txt',
+            type: 'txt',
+            created_at: '2026-08-04T10:00:00Z',
+            chunk_count: listCalls >= 2 ? 3 : 0,
+            status: listCalls >= 2 ? 'indexed' : 'uploaded',
+          },
+        ])
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('已上传')).toBeTruthy()
+    expect(screen.getByText('文档处理中，完成后会自动刷新索引状态。')).toBeTruthy()
+    expect(await screen.findByText('已索引', undefined, { timeout: 3500 })).toBeTruthy()
+  }, 8000)
 
   test('deletes a document and refreshes the document list', async () => {
     let deleted = false

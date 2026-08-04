@@ -105,6 +105,20 @@ function App() {
     }
   }, [chatMessage, chatMessages])
 
+  const hasProcessingDocuments = documents.some((document) => document.status === 'uploaded')
+
+  useEffect(() => {
+    if (backendStatus !== 'online' || !hasProcessingDocuments) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadDocuments()
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [backendStatus, hasProcessingDocuments, loadDocuments])
+
   async function handleUploadChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
     const file = input.files?.[0]
@@ -119,7 +133,7 @@ function App() {
     try {
       const uploadedDocument = await uploadDocument(file)
       setUploadStatus('success')
-      setUploadMessage(`上传完成：${uploadedDocument.filename}`)
+      setUploadMessage(`上传已接收：${uploadedDocument.filename}`)
       await loadDocuments()
       setSelectedDocumentId(uploadedDocument.id)
     } catch (error) {
@@ -279,6 +293,9 @@ function App() {
 
           <div className="document-list" aria-label="已上传文档">
             <p className={`document-state ${documentStatus}`}>{documentMessage}</p>
+            {hasProcessingDocuments ? (
+              <p className="document-processing-note">文档处理中，完成后会自动刷新索引状态。</p>
+            ) : null}
             {documents.length > 0
               ? documents.map((document) => (
                   <article

@@ -14,6 +14,11 @@ class FakeEmbeddingService:
         return [[float(len(text)), float(index)] for index, text in enumerate(texts)]
 
 
+class FailingEmbeddingService:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding unavailable")
+
+
 def _client_with_upload_dir(
     upload_dir: Path,
     vector_store_dir: Path | None = None,
@@ -64,20 +69,91 @@ def test_upload_txt_document_saves_file_and_returns_metadata() -> None:
         body = response.json()
         assert body["filename"] == "notes.txt"
         assert body["type"] == "txt"
-        assert body["text_length"] == len("RAG stores private document context.")
-        assert body["page_count"] == 1
-        assert body["chunk_count"] == 3
-        assert body["status"] == "indexed"
-        assert body["pages"] == [
-            {
-                "page": 1,
-                "text": "RAG stores private document context.",
-            }
-        ]
+        assert body["text_length"] == 0
+        assert body["page_count"] == 0
+        assert body["chunk_count"] == 0
+        assert body["status"] == "uploaded"
+        assert body["pages"] == []
         assert body["saved_path"].endswith(".txt")
         assert (upload_dir / Path(body["saved_path"]).name).read_text(encoding="utf-8") == (
             "RAG stores private document context."
         )
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_async_upload_returns_uploaded_before_indexing() -> None:
+    upload_dir = _workspace_upload_dir()
+    try:
+        client = _client_with_upload_dir(upload_dir)
+
+        response = client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG stores private document context.", "text/plain")},
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["status"] == "uploaded"
+        assert body["chunk_count"] == 0
+        assert body["text_length"] == 0
+        assert body["page_count"] == 0
+        assert body["pages"] == []
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_background_processing_marks_document_indexed() -> None:
+    upload_dir = _workspace_upload_dir()
+    try:
+        client = _client_with_upload_dir(upload_dir)
+
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG stores private document context.", "text/plain")},
+        )
+        assert upload_response.status_code == 201
+        uploaded = upload_response.json()
+
+        documents = client.get("/api/documents").json()
+
+        assert documents == [
+            {
+                "id": uploaded["id"],
+                "filename": "notes.txt",
+                "type": "txt",
+                "created_at": uploaded["created_at"],
+                "chunk_count": 3,
+                "status": "indexed",
+            }
+        ]
+    finally:
+        _remove_tree(upload_dir)
+
+
+def test_background_processing_marks_failed_when_indexing_fails() -> None:
+    upload_dir = _workspace_upload_dir()
+    try:
+        client = TestClient(
+            create_app(
+                upload_dir=upload_dir,
+                vector_store_dir=upload_dir / "chroma_db",
+                database_url=f"sqlite:///{upload_dir / 'app.db'}",
+                embedding_service=FailingEmbeddingService(),
+                chunk_size=20,
+                chunk_overlap=5,
+            )
+        )
+
+        response = client.post(
+            "/api/documents/upload",
+            files={"file": ("notes.txt", b"RAG stores private document context.", "text/plain")},
+        )
+
+        assert response.status_code == 201
+        documents = client.get("/api/documents").json()
+        assert documents[0]["status"] == "failed"
+        assert documents[0]["chunk_count"] == 0
     finally:
         _remove_tree(upload_dir)
 
@@ -101,7 +177,7 @@ def test_upload_txt_document_persists_chunks_to_chroma() -> None:
 
         assert response.status_code == 201
         body = response.json()
-        assert body["chunk_count"] == 4
+        assert body["chunk_count"] == 0
 
         chroma_client = chromadb.PersistentClient(path=str(vector_store_dir))
         collection = chroma_client.get_collection("document_chunks")
@@ -138,7 +214,7 @@ def test_list_documents_returns_uploaded_document_metadata() -> None:
                 "filename": "notes.txt",
                 "type": "txt",
                 "created_at": uploaded["created_at"],
-                "chunk_count": uploaded["chunk_count"],
+                "chunk_count": 3,
                 "status": "indexed",
             }
         ]
@@ -221,7 +297,7 @@ def test_document_metadata_persists_across_app_restarts() -> None:
         documents = list_response.json()
         assert len(documents) == 1
         assert documents[0]["filename"] == "notes.txt"
-        assert documents[0]["chunk_count"] == upload_response.json()["chunk_count"]
+        assert documents[0]["chunk_count"] == 3
     finally:
         _remove_tree(workspace)
 
@@ -257,7 +333,12 @@ def test_upload_markdown_document_is_parsed_as_text() -> None:
         body = response.json()
         assert body["filename"] == "guide.md"
         assert body["type"] == "md"
-        assert body["pages"][0]["text"] == "# RAG\n\nUse citations."
+        assert body["status"] == "uploaded"
+
+        chroma_client = chromadb.PersistentClient(path=str(upload_dir / "chroma_db"))
+        collection = chroma_client.get_collection("document_chunks")
+        stored = collection.get(where={"document_id": body["id"]})
+        assert "# RAG" in stored["documents"][0]
     finally:
         _remove_tree(upload_dir)
 
@@ -276,8 +357,12 @@ def test_upload_pdf_document_preserves_page_text() -> None:
         body = response.json()
         assert body["filename"] == "paper.pdf"
         assert body["type"] == "pdf"
-        assert body["page_count"] == 1
-        assert "PDF page about RAG" in body["pages"][0]["text"]
+        assert body["status"] == "uploaded"
+
+        chroma_client = chromadb.PersistentClient(path=str(upload_dir / "chroma_db"))
+        collection = chroma_client.get_collection("document_chunks")
+        stored = collection.get(where={"document_id": body["id"]})
+        assert any("PDF page about RAG" in document for document in stored["documents"])
     finally:
         _remove_tree(upload_dir)
 

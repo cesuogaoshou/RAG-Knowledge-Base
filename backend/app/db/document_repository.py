@@ -5,6 +5,9 @@ from app.db.models import DocumentRecord
 from app.schemas.document import DocumentStatus, DocumentSummary, UploadedDocument
 
 
+ACTIVE_STATUSES: tuple[DocumentStatus, ...] = ("uploaded", "indexed", "failed")
+
+
 class SQLDocumentRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self.session_factory = session_factory
@@ -14,6 +17,15 @@ class SQLDocumentRepository:
             records = session.scalars(
                 select(DocumentRecord)
                 .where(DocumentRecord.status == status)
+                .order_by(DocumentRecord.created_at)
+            ).all()
+            return [_record_to_summary(record) for record in records]
+
+    def list_active_documents(self) -> list[DocumentSummary]:
+        with self.session_factory() as session:
+            records = session.scalars(
+                select(DocumentRecord)
+                .where(DocumentRecord.status.in_(ACTIVE_STATUSES))
                 .order_by(DocumentRecord.created_at)
             ).all()
             return [_record_to_summary(record) for record in records]
@@ -38,6 +50,21 @@ class SQLDocumentRepository:
             record.chunk_count = document.chunk_count
             record.status = document.status
             session.commit()
+
+    def update_document_status(
+        self,
+        document_id: str,
+        status: DocumentStatus,
+        chunk_count: int,
+    ) -> bool:
+        with self.session_factory() as session:
+            record = session.get(DocumentRecord, document_id)
+            if record is None or record.status == "deleted":
+                return False
+            record.status = status
+            record.chunk_count = chunk_count
+            session.commit()
+            return True
 
     def delete_document(self, document_id: str) -> bool:
         with self.session_factory() as session:

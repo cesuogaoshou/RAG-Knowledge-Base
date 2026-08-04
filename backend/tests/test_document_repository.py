@@ -96,6 +96,57 @@ def test_sql_document_repository_marks_deleted_document_and_hides_it_from_active
     assert repository.delete_document("doc-1") is False
 
 
+def test_sql_document_repository_lists_uploaded_indexed_and_failed_documents() -> None:
+    session_factory = create_session_factory(_database_url())
+    initialize_database(session_factory)
+    repository = SQLDocumentRepository(session_factory)
+
+    uploaded = _uploaded_document(document_id="uploaded-doc")
+    uploaded.status = "uploaded"
+    uploaded.chunk_count = 0
+    indexed = _uploaded_document(document_id="indexed-doc")
+    indexed.status = "indexed"
+    failed = _uploaded_document(document_id="failed-doc")
+    failed.status = "failed"
+    failed.chunk_count = 0
+    deleted = _uploaded_document(document_id="deleted-doc")
+    deleted.status = "deleted"
+
+    repository.add_document(uploaded)
+    repository.add_document(indexed)
+    repository.add_document(failed)
+    repository.add_document(deleted)
+
+    documents = repository.list_active_documents()
+
+    assert [document.id for document in documents] == [
+        "uploaded-doc",
+        "indexed-doc",
+        "failed-doc",
+    ]
+    assert [document.status for document in documents] == ["uploaded", "indexed", "failed"]
+
+
+def test_sql_document_repository_updates_status_and_chunk_count() -> None:
+    session_factory = create_session_factory(_database_url())
+    initialize_database(session_factory)
+    repository = SQLDocumentRepository(session_factory)
+    uploaded = _uploaded_document(document_id="doc-1")
+    uploaded.status = "uploaded"
+    uploaded.chunk_count = 0
+    repository.add_document(uploaded)
+
+    updated = repository.update_document_status("doc-1", status="indexed", chunk_count=7)
+    missing = repository.update_document_status("missing-doc", status="failed", chunk_count=0)
+    document = repository.get_document("doc-1")
+
+    assert updated is True
+    assert missing is False
+    assert document is not None
+    assert document.status == "indexed"
+    assert document.chunk_count == 7
+
+
 def test_initialize_database_adds_status_column_to_existing_documents_table() -> None:
     workspace = Path(".test-data") / f"sqlite-migrate-status-{uuid4().hex}"
     workspace.mkdir(parents=True, exist_ok=True)

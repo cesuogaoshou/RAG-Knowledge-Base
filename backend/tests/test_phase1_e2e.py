@@ -59,11 +59,15 @@ def test_phase1_backend_rag_flow() -> None:
         )
         assert upload.status_code == 201
         uploaded = upload.json()
-        assert uploaded["chunk_count"] == 1
+        assert uploaded["status"] == "uploaded"
+        assert uploaded["chunk_count"] == 0
 
         documents = client.get("/api/documents")
         assert documents.status_code == 200
-        assert documents.json()[0]["id"] == uploaded["id"]
+        listed_document = documents.json()[0]
+        assert listed_document["id"] == uploaded["id"]
+        assert listed_document["status"] == "indexed"
+        assert listed_document["chunk_count"] == 1
 
         search = client.post("/api/search", json={"question": "What does RAG use?", "top_k": 1})
         assert search.status_code == 200

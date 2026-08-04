@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
 
 from app.schemas.document import DeletedDocument, DocumentSummary, UploadedDocument
 from app.services.embedding_service import EmbeddingService
-from app.services.document_loader import save_and_parse_document
+from app.services.document_loader import save_uploaded_file
 from app.services.document_metadata_store import DocumentMetadataStore
-from app.services.text_splitter import split_pages_into_chunks
+from app.services.document_processor import DocumentProcessor
 from app.services.vector_store import ChromaVectorStore
 
 
@@ -22,22 +22,23 @@ def create_documents_router(
 
     @router.get("", response_model=list[DocumentSummary])
     def list_documents() -> list[DocumentSummary]:
-        return metadata_store.list_documents()
+        return metadata_store.list_active_documents()
 
     @router.post("/upload", response_model=UploadedDocument, status_code=status.HTTP_201_CREATED)
-    async def upload_document(file: UploadFile = File(...)) -> UploadedDocument:
-        document = await save_and_parse_document(file, upload_dir)
-        chunks = split_pages_into_chunks(
-            document_id=document.id,
-            filename=document.filename,
-            pages=document.pages,
+    async def upload_document(
+        background_tasks: BackgroundTasks,
+        file: UploadFile = File(...),
+    ) -> UploadedDocument:
+        document = await save_uploaded_file(file, upload_dir)
+        metadata_store.add_document(document)
+        processor = DocumentProcessor(
+            vector_store=vector_store,
+            embedding_service=embedding_service,
+            metadata_store=metadata_store,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        embeddings = embedding_service.embed_texts([chunk.text for chunk in chunks])
-        vector_store.add_chunks(chunks, embeddings)
-        document.chunk_count = len(chunks)
-        metadata_store.add_document(document)
+        background_tasks.add_task(processor.process, document)
         return document
 
     @router.delete("/{document_id}", response_model=DeletedDocument)

@@ -13,6 +13,13 @@ TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
 
 
 async def save_and_parse_document(file: UploadFile, upload_dir: Path) -> UploadedDocument:
+    document = await save_uploaded_file(file, upload_dir)
+    parsed_document = parse_saved_document(document)
+    parsed_document.status = "indexed"
+    return parsed_document
+
+
+async def save_uploaded_file(file: UploadFile, upload_dir: Path) -> UploadedDocument:
     original_filename = Path(file.filename or "").name
     extension = Path(original_filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
@@ -27,21 +34,31 @@ async def save_and_parse_document(file: UploadFile, upload_dir: Path) -> Uploade
     saved_path = upload_dir / f"{document_id}{extension}"
     saved_path.write_bytes(content)
 
-    pages = _parse_document(saved_path, extension)
-    text_length = sum(len(page.text) for page in pages)
-    if text_length == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file contains no readable text")
-
     return UploadedDocument(
         id=document_id,
         filename=original_filename,
         type=_document_type(extension),
         created_at=datetime.now(timezone.utc).isoformat(),
+        status="uploaded",
         saved_path=str(saved_path),
-        text_length=text_length,
-        page_count=len(pages),
-        pages=pages,
+        text_length=0,
+        page_count=0,
+        chunk_count=0,
+        pages=[],
     )
+
+
+def parse_saved_document(document: UploadedDocument) -> UploadedDocument:
+    saved_path = Path(document.saved_path)
+    pages = _parse_document(saved_path, saved_path.suffix.lower())
+    text_length = sum(len(page.text) for page in pages)
+    if text_length == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file contains no readable text")
+
+    document.pages = pages
+    document.text_length = text_length
+    document.page_count = len(pages)
+    return document
 
 
 def parse_document(path: Path) -> list[DocumentPage]:
