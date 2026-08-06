@@ -34,7 +34,7 @@ Phase 1 backend closed loop is complete. The backend currently exposes health ch
 
 Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
-Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database. Phase 6 has started with SQLite-backed chat session, message, and answer-source history.
+Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database. Phase 6 has started with SQLite-backed chat session, answer-source, and evaluation run history.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Browser UI (React + Vite)
   -> DeepSeek Chat for grounded answers
 ```
 
-The backend keeps business document state, chat history, and saved answer citations in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
+The backend keeps business document state, chat history, saved answer citations, and evaluation run summaries in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
 
 ## Backend Development
 
@@ -190,6 +190,13 @@ cd backend
 .\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval
 ```
 
+Save the baseline summary and full report to the local SQLite database:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --save-run
+```
+
 The report includes:
 
 - `source_hit_rate`: whether the expected source file appeared in retrieved results.
@@ -217,6 +224,18 @@ cd backend
 ```
 
 The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 15-case fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow.
+
+List saved evaluation run summaries:
+
+```text
+GET http://127.0.0.1:8000/api/evaluations
+```
+
+Read one saved evaluation run, including the full report:
+
+```text
+GET http://127.0.0.1:8000/api/evaluations/{run_id}
+```
 
 ## Frontend Development
 
@@ -340,6 +359,7 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Low-relevance refusal prevents weakly grounded LLM calls.
 - Server-Sent Events stream answer tokens for a more responsive local demo.
 - SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
+- Evaluation run summaries can be saved and reviewed later from SQLite.
 - Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
 
 ## Key Tradeoffs

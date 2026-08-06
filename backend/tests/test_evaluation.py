@@ -455,3 +455,33 @@ def test_main_runs_reranker_comparison(monkeypatch, capsys, tmp_path: Path) -> N
     )
 
     assert json.loads(capsys.readouterr().out)["recommendation"] == "keep_retrieval_only"
+
+
+def test_main_saves_evaluation_run_when_requested(monkeypatch, capsys, tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'app.db'}"
+
+    def fake_run_evaluation(**kwargs):
+        return {
+            "summary": {
+                "case_count": 1,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 1.0,
+                "refusal_accuracy": 1.0,
+            },
+            "outcomes": [{"id": "rag"}],
+        }
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_evaluation", fake_run_evaluation)
+
+    main(
+        [
+            "--database-url",
+            database_url,
+            "--save-run",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+
+    assert output["saved_run_id"]
+    assert output["summary"]["case_count"] == 1

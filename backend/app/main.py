@@ -6,11 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import create_chat_router
 from app.api.chat_history import create_chat_history_router
 from app.api.documents import create_documents_router
+from app.api.evaluation import create_evaluation_router
 from app.api.search import create_search_router
 from app.core.config import AppSettings
 from app.db.database import create_session_factory, initialize_database
 from app.db.chat_repository import SQLChatRepository
 from app.db.document_repository import SQLDocumentRepository
+from app.db.evaluation_repository import SQLEvaluationRepository
 from app.services.chat_service import ChatService, DeepSeekChatService
 from app.services.document_metadata_store import DocumentMetadataStore
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
@@ -53,6 +55,7 @@ def create_app(
     initialize_database(session_factory)
     resolved_metadata_store = metadata_store or SQLDocumentRepository(session_factory)
     chat_repository = SQLChatRepository(session_factory)
+    evaluation_repository = SQLEvaluationRepository(session_factory)
     resolved_embedding_service = embedding_service or SentenceTransformerEmbeddingService()
     app.include_router(
         create_documents_router(
@@ -82,6 +85,7 @@ def create_app(
         )
     )
     app.include_router(create_chat_history_router(chat_repository))
+    app.include_router(create_evaluation_router(evaluation_repository))
 
     return app
 

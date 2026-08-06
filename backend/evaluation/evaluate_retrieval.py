@@ -8,6 +8,8 @@ import re
 import shutil
 from typing import Iterable, Protocol
 
+from app.db.database import create_session_factory, initialize_database
+from app.db.evaluation_repository import SQLEvaluationRepository
 from app.schemas.search import SearchResult
 from app.services.document_loader import parse_document
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
@@ -328,6 +330,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--top-ks", default=None)
     parser.add_argument("--min-relevance-scores", default=None)
     parser.add_argument("--compare-reranker", action="store_true")
+    parser.add_argument("--save-run", action="store_true")
+    parser.add_argument("--database-url", default="sqlite:///data/app.db")
     args = parser.parse_args(argv)
 
     if args.compare_reranker:
@@ -365,7 +369,30 @@ def main(argv: list[str] | None = None) -> None:
         top_k=args.top_k,
         min_relevance_score=args.min_relevance_score,
     )
+    if args.save_run:
+        saved_run = _save_evaluation_run(
+            database_url=args.database_url,
+            mode="baseline",
+            parameters={
+                "top_k": args.top_k,
+                "min_relevance_score": args.min_relevance_score,
+            },
+            report=report,
+        )
+        report["saved_run_id"] = saved_run.id
     print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+def _save_evaluation_run(
+    database_url: str,
+    mode: str,
+    parameters: dict[str, object],
+    report: dict[str, object],
+):
+    session_factory = create_session_factory(database_url)
+    initialize_database(session_factory)
+    repository = SQLEvaluationRepository(session_factory)
+    return repository.save_run(mode=mode, parameters=parameters, report=report)
 
 
 if __name__ == "__main__":

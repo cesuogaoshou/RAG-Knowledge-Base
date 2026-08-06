@@ -57,3 +57,18 @@ class AnswerSourceRecord(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     message: Mapped[ChatMessageRecord] = relationship(back_populates="sources")
+
+
+class EvaluationRunRecord(Base):
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    mode: Mapped[str] = mapped_column(String, nullable=False)
+    case_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_hit_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    marker_hit_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    refusal_accuracy: Mapped[float] = mapped_column(Float, nullable=False)
+    recommendation: Mapped[str | None] = mapped_column(String, nullable=True)
+    parameters_json: Mapped[str] = mapped_column(Text, nullable=False)
+    report_json: Mapped[str] = mapped_column(Text, nullable=False)
