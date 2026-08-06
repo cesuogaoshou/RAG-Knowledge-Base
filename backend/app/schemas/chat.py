@@ -13,3 +13,4 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SearchResult]
+    session_id: str | None = None

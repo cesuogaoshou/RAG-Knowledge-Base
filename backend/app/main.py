@@ -4,10 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.chat import create_chat_router
+from app.api.chat_history import create_chat_history_router
 from app.api.documents import create_documents_router
 from app.api.search import create_search_router
 from app.core.config import AppSettings
 from app.db.database import create_session_factory, initialize_database
+from app.db.chat_repository import SQLChatRepository
 from app.db.document_repository import SQLDocumentRepository
 from app.services.chat_service import ChatService, DeepSeekChatService
 from app.services.document_metadata_store import DocumentMetadataStore
@@ -47,10 +49,10 @@ def create_app(
         }
 
     resolved_vector_store = vector_store or ChromaVectorStore(vector_store_dir or resolved_settings.vector_store_dir)
-    resolved_metadata_store = metadata_store or _create_document_repository(
-        database_url=database_url,
-        settings=resolved_settings,
-    )
+    session_factory = create_session_factory(database_url or resolved_settings.database_url)
+    initialize_database(session_factory)
+    resolved_metadata_store = metadata_store or SQLDocumentRepository(session_factory)
+    chat_repository = SQLChatRepository(session_factory)
     resolved_embedding_service = embedding_service or SentenceTransformerEmbeddingService()
     app.include_router(
         create_documents_router(
@@ -76,19 +78,12 @@ def create_app(
             chat_service=chat_service or DeepSeekChatService(settings=resolved_settings),
             default_top_k=resolved_settings.default_top_k,
             min_relevance_score=resolved_settings.min_relevance_score,
+            chat_repository=chat_repository,
         )
     )
+    app.include_router(create_chat_history_router(chat_repository))
 
     return app
-
-
-def _create_document_repository(
-    database_url: str | None,
-    settings: AppSettings,
-) -> SQLDocumentRepository:
-    session_factory = create_session_factory(database_url or settings.database_url)
-    initialize_database(session_factory)
-    return SQLDocumentRepository(session_factory)
 
 
 app = create_app()
