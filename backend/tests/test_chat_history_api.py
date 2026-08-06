@@ -65,6 +65,8 @@ def test_chat_history_api_lists_reads_and_deletes_sessions() -> None:
         assert list_response.json()[0]["message_count"] == 2
         assert detail_response.status_code == 200
         assert [message["role"] for message in detail_response.json()["messages"]] == ["user", "assistant"]
+        assert detail_response.json()["messages"][1]["sources"][0]["filename"] == "notes.txt"
+        assert "RAG retrieves relevant chunks" in detail_response.json()["messages"][1]["sources"][0]["content"]
         assert delete_response.json() == {"id": session_id, "deleted": True}
         assert missing_response.status_code == 404
     finally:

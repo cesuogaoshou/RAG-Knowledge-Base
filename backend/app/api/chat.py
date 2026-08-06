@@ -38,6 +38,7 @@ def create_chat_router(
                 question=request.question,
                 answer=INSUFFICIENT_EVIDENCE_ANSWER,
                 top_k=top_k,
+                sources=[],
             )
             return ChatResponse(answer=INSUFFICIENT_EVIDENCE_ANSWER, sources=[], session_id=session_id)
 
@@ -48,6 +49,7 @@ def create_chat_router(
             question=request.question,
             answer=answer,
             top_k=top_k,
+            sources=display_sources,
         )
         return ChatResponse(answer=answer, sources=display_sources, session_id=session_id)
 
@@ -93,6 +95,7 @@ def _stream_refusal_events(
         question=question,
         answer=INSUFFICIENT_EVIDENCE_ANSWER,
         top_k=top_k,
+        sources=[],
     )
     if session_id:
         yield _format_sse("session", {"session_id": session_id})
@@ -116,6 +119,7 @@ def _stream_chat_events(
         question=question,
         answer="".join(answer_parts),
         top_k=top_k,
+        sources=sources,
     )
     if session_id:
         yield _format_sse("session", {"session_id": session_id})
@@ -148,6 +152,7 @@ def _persist_chat_turn(
     question: str,
     answer: str,
     top_k: int,
+    sources: list[SearchResult],
 ) -> str | None:
     if chat_repository is None:
         return None
@@ -167,6 +172,7 @@ def _persist_chat_turn(
             role="assistant",
             content=answer,
             top_k=top_k,
-        )
+        ),
+        sources=sources,
     )
     return session.id

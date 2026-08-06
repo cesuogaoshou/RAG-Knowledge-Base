@@ -34,7 +34,7 @@ Phase 1 backend closed loop is complete. The backend currently exposes health ch
 
 Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
-Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database. Phase 6 has started with SQLite-backed chat session and message history.
+Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database. Phase 6 has started with SQLite-backed chat session, message, and answer-source history.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Browser UI (React + Vite)
   -> DeepSeek Chat for grounded answers
 ```
 
-The backend keeps business document state and chat history in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
+The backend keeps business document state, chat history, and saved answer citations in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
 
 ## Backend Development
 
@@ -144,7 +144,7 @@ Content-Type: application/json
 
 The chat response includes an LLM-generated answer and the retrieved sources used as context.
 If the retrieved evidence is weak, the backend returns `根据当前知识库资料无法确定。` without calling the LLM.
-Each JSON chat request also creates a local chat session and stores the user question plus assistant answer in SQLite.
+Each JSON chat request also creates a local chat session and stores the user question, assistant answer, and displayed answer citations in SQLite.
 
 Stream a question response with Server-Sent Events:
 
@@ -159,7 +159,7 @@ Content-Type: application/json
 ```
 
 The streaming endpoint uses the same retrieval and low-relevance guard as `/api/chat`. It emits `token` events as answer text arrives, then a `sources` event with the final deduplicated citations, followed by a `done` event. The React frontend prefers this streaming endpoint for a more responsive demo and falls back to `/api/chat` if streaming is unavailable.
-Streaming chat also stores the completed turn after the answer finishes and emits a `session` event with the persisted chat session id.
+Streaming chat also stores the completed turn and displayed citations after the answer finishes, then emits a `session` event with the persisted chat session id.
 
 In the frontend, each answer citation shows a readable preview by default. Expand a citation to inspect the exact chunk index, page, score, and full source text returned by the backend.
 
@@ -169,7 +169,7 @@ List saved chat sessions:
 GET http://127.0.0.1:8000/api/chat/sessions
 ```
 
-Read one saved chat session:
+Read one saved chat session, including messages and persisted answer citations:
 
 ```text
 GET http://127.0.0.1:8000/api/chat/sessions/{session_id}
@@ -339,7 +339,7 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Retrieval quality is measured with a repeatable offline fixture and parameter sweep.
 - Low-relevance refusal prevents weakly grounded LLM calls.
 - Server-Sent Events stream answer tokens for a more responsive local demo.
-- SQLite-backed chat sessions persist local question/answer history across backend restarts.
+- SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
 - Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
 
 ## Key Tradeoffs
