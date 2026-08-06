@@ -237,6 +237,30 @@ Read one saved evaluation run, including the full report:
 GET http://127.0.0.1:8000/api/evaluations/{run_id}
 ```
 
+## Local Data Export And Reset
+
+Export local demo data from SQLite:
+
+```text
+GET http://127.0.0.1:8000/api/admin/export
+```
+
+The export response includes active document metadata, saved chat sessions with messages and answer citations, and saved evaluation runs.
+
+Safely reset local chat and evaluation history:
+
+```text
+POST http://127.0.0.1:8000/api/admin/reset
+Content-Type: application/json
+
+{
+  "reset_chat_history": true,
+  "reset_evaluations": true
+}
+```
+
+This safe reset does not delete uploaded documents or vector-store data by default. Passing `reset_documents: true` is rejected by this endpoint so document deletion still goes through the existing document deletion path.
+
 ## Frontend Development
 
 Install frontend dependencies:
@@ -360,6 +384,7 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Server-Sent Events stream answer tokens for a more responsive local demo.
 - SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
 - Evaluation run summaries can be saved and reviewed later from SQLite.
+- Local export and safe reset endpoints make demo data easier to inspect and clean without adding user accounts or admin roles.
 - Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
 
 ## Key Tradeoffs

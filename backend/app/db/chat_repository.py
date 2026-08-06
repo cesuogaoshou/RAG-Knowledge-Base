@@ -120,6 +120,13 @@ class SQLChatRepository:
             session.commit()
             return True
 
+    def clear_all(self) -> None:
+        with self.session_factory() as session:
+            records = session.scalars(select(ChatSessionRecord)).all()
+            for record in records:
+                session.delete(record)
+            session.commit()
+
 
 def _message_to_summary(
     record: ChatMessageRecord,

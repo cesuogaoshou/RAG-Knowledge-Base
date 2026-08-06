@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin import create_admin_router
 from app.api.chat import create_chat_router
 from app.api.chat_history import create_chat_history_router
 from app.api.documents import create_documents_router
@@ -86,6 +87,13 @@ def create_app(
     )
     app.include_router(create_chat_history_router(chat_repository))
     app.include_router(create_evaluation_router(evaluation_repository))
+    app.include_router(
+        create_admin_router(
+            metadata_store=resolved_metadata_store,
+            chat_repository=chat_repository,
+            evaluation_repository=evaluation_repository,
+        )
+    )
 
     return app
 

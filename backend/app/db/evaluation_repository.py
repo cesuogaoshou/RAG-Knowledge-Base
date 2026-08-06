@@ -54,6 +54,13 @@ class SQLEvaluationRepository:
                 report=json.loads(record.report_json),
             )
 
+    def clear_all(self) -> None:
+        with self.session_factory() as session:
+            records = session.scalars(select(EvaluationRunRecord)).all()
+            for record in records:
+                session.delete(record)
+            session.commit()
+
 
 def _record_to_summary(record: EvaluationRunRecord) -> EvaluationRunSummary:
     return EvaluationRunSummary(
