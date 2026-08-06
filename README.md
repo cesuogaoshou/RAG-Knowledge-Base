@@ -261,6 +261,8 @@ Content-Type: application/json
 
 This safe reset does not delete uploaded documents or vector-store data by default. Passing `reset_documents: true` is rejected by this endpoint so document deletion still goes through the existing document deletion path.
 
+The frontend includes a compact local-data panel for recent chat sessions, saved evaluation summaries, export, and safe reset controls.
+
 ## Frontend Development
 
 Install frontend dependencies:
@@ -384,7 +386,7 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Server-Sent Events stream answer tokens for a more responsive local demo.
 - SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
 - Evaluation run summaries can be saved and reviewed later from SQLite.
-- Local export and safe reset endpoints make demo data easier to inspect and clean without adding user accounts or admin roles.
+- Local export and safe reset controls make demo data easier to inspect and clean without adding user accounts or admin roles.
 - Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
 
 ## Key Tradeoffs

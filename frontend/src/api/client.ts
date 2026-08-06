@@ -39,6 +39,7 @@ export type SourceCitation = {
 export type ChatResponse = {
   answer: string
   sources: SourceCitation[]
+  session_id?: string | null
 }
 
 export type SearchResponse = {
@@ -46,6 +47,40 @@ export type SearchResponse = {
   top_k: number
   results: SourceCitation[]
 }
+
+export type ChatSessionSummary = {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+  message_count: number
+}
+
+export type EvaluationRunSummary = {
+  id: string
+  created_at: string
+  mode: string
+  case_count: number
+  source_hit_rate: number
+  marker_hit_rate: number
+  refusal_accuracy: number
+  recommendation: string | null
+  parameters: Record<string, unknown>
+}
+
+export type LocalExportResponse = {
+  documents: Array<Record<string, unknown>>
+  chat_sessions: Array<Record<string, unknown>>
+  evaluation_runs: Array<Record<string, unknown>>
+}
+
+export type ResetLocalDataRequest = {
+  reset_chat_history: boolean
+  reset_evaluations: boolean
+  reset_documents: boolean
+}
+
+export type ResetLocalDataResponse = ResetLocalDataRequest
 
 type ChatRequest = {
   question: string
@@ -152,6 +187,30 @@ export async function searchDocuments(request: ChatRequest): Promise<SearchRespo
 
 export async function askQuestion(request: ChatRequest): Promise<ChatResponse> {
   return requestJson<ChatResponse>('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+}
+
+export async function fetchChatSessions(): Promise<ChatSessionSummary[]> {
+  return requestJson<ChatSessionSummary[]>('/api/chat/sessions')
+}
+
+export async function fetchEvaluationRuns(): Promise<EvaluationRunSummary[]> {
+  return requestJson<EvaluationRunSummary[]>('/api/evaluations')
+}
+
+export async function exportLocalData(): Promise<LocalExportResponse> {
+  return requestJson<LocalExportResponse>('/api/admin/export')
+}
+
+export async function resetLocalData(
+  request: ResetLocalDataRequest,
+): Promise<ResetLocalDataResponse> {
+  return requestJson<ResetLocalDataResponse>('/api/admin/reset', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -5,12 +5,18 @@ import {
   askQuestion,
   apiBaseUrl,
   deleteDocument,
+  exportLocalData,
+  fetchChatSessions,
   fetchDocuments,
+  fetchEvaluationRuns,
   fetchHealth,
+  resetLocalData,
   searchDocuments,
   streamQuestion,
   uploadDocument,
+  type ChatSessionSummary,
   type DocumentSummary,
+  type EvaluationRunSummary,
   type SourceCitation,
 } from './api/client'
 
@@ -32,6 +38,12 @@ function App() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [uploadStatus, setUploadStatus] = useState<LoadingStatus>('idle')
   const [uploadMessage, setUploadMessage] = useState('支持 PDF、TXT、Markdown 文件')
+  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([])
+  const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRunSummary[]>([])
+  const [persistenceStatus, setPersistenceStatus] = useState<LoadingStatus>('idle')
+  const [persistenceMessage, setPersistenceMessage] = useState('读取本地持久化数据')
+  const [adminActionStatus, setAdminActionStatus] = useState<LoadingStatus>('idle')
+  const [adminActionMessage, setAdminActionMessage] = useState('导出或清理本地演示数据')
   const [topK, setTopK] = useState(3)
   const [question, setQuestion] = useState('')
   const [chatStatus, setChatStatus] = useState<LoadingStatus>('idle')
@@ -71,6 +83,25 @@ function App() {
     }
   }, [])
 
+  const loadPersistenceData = useCallback(async () => {
+    setPersistenceStatus('loading')
+    setPersistenceMessage('正在加载本地数据')
+
+    try {
+      const [nextChatSessions, nextEvaluationRuns] = await Promise.all([
+        fetchChatSessions(),
+        fetchEvaluationRuns(),
+      ])
+      setChatSessions(nextChatSessions)
+      setEvaluationRuns(nextEvaluationRuns)
+      setPersistenceStatus('success')
+      setPersistenceMessage('本地数据已加载')
+    } catch {
+      setPersistenceStatus('error')
+      setPersistenceMessage('持久化数据加载失败')
+    }
+  }, [])
+
   useEffect(() => {
     let ignore = false
 
@@ -81,6 +112,7 @@ function App() {
           setBackendStatus('online')
           setBackendStatusMessage('后端已连接')
           void loadDocuments()
+          void loadPersistenceData()
         }
       } catch {
         if (!ignore) {
@@ -97,7 +129,7 @@ function App() {
     return () => {
       ignore = true
     }
-  }, [loadDocuments])
+  }, [loadDocuments, loadPersistenceData])
 
   useEffect(() => {
     const conversation = conversationRef.current
@@ -162,6 +194,43 @@ function App() {
       setDocumentMessage(message)
     } finally {
       setDeletingDocumentId(null)
+    }
+  }
+
+  async function handleExportLocalData() {
+    setAdminActionStatus('loading')
+    setAdminActionMessage('正在导出本地数据')
+
+    try {
+      const exportedData = await exportLocalData()
+      setAdminActionStatus('success')
+      setAdminActionMessage(
+        `已导出：${exportedData.documents.length} 个文档，${exportedData.chat_sessions.length} 个问答，${exportedData.evaluation_runs.length} 次评估`,
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '导出失败，请稍后重试'
+      setAdminActionStatus('error')
+      setAdminActionMessage(message)
+    }
+  }
+
+  async function handleResetLocalData() {
+    setAdminActionStatus('loading')
+    setAdminActionMessage('正在清理问答和评估记录')
+
+    try {
+      await resetLocalData({
+        reset_chat_history: true,
+        reset_evaluations: true,
+        reset_documents: false,
+      })
+      setAdminActionStatus('success')
+      setAdminActionMessage('已清理问答和评估记录，文档保留')
+      await loadPersistenceData()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '清理失败，请稍后重试'
+      setAdminActionStatus('error')
+      setAdminActionMessage(message)
     }
   }
 
@@ -244,6 +313,7 @@ function App() {
       setChatStatus('success')
       setChatMessage('回答已生成')
       setQuestion('')
+      void loadPersistenceData()
     } catch {
       try {
         const response = await askQuestion({ question: trimmedQuestion, top_k: topK })
@@ -262,6 +332,7 @@ function App() {
         setChatStatus('success')
         setChatMessage('回答已生成')
         setQuestion('')
+        void loadPersistenceData()
       } catch (fallbackError) {
         setChatMessages((currentMessages) =>
           currentMessages.filter((message) => message.id !== answerId),
@@ -275,6 +346,7 @@ function App() {
 
   const canAsk = backendStatus === 'online' && chatStatus !== 'loading'
   const canSearch = backendStatus === 'online' && retrievalStatus !== 'loading'
+  const canUseAdminActions = backendStatus === 'online' && adminActionStatus !== 'loading'
 
   return (
     <main className="app-shell">
@@ -370,6 +442,70 @@ function App() {
                 ))
               : null}
           </div>
+
+          <section className="persistence-panel" aria-label="本地持久化数据">
+            <div className="persistence-heading">
+              <div>
+                <p className="section-label">持久化</p>
+                <h3>本地数据</h3>
+              </div>
+              <span className={`persistence-state ${persistenceStatus}`}>{persistenceMessage}</span>
+            </div>
+
+            <div className="persistence-actions">
+              <button
+                disabled={!canUseAdminActions}
+                onClick={() => void handleExportLocalData()}
+                type="button"
+              >
+                导出数据
+              </button>
+              <button
+                disabled={!canUseAdminActions}
+                onClick={() => void handleResetLocalData()}
+                type="button"
+              >
+                安全清理
+              </button>
+            </div>
+            <p className={`admin-state ${adminActionStatus}`} aria-live="polite">
+              {adminActionMessage}
+            </p>
+
+            <div className="persistence-grid">
+              <section className="persistence-group" aria-label="最近问答">
+                <h4>最近问答</h4>
+                {chatSessions.length > 0 ? (
+                  chatSessions.slice(0, 3).map((session) => (
+                    <article className="persistence-row" key={session.id}>
+                      <strong>{session.title}</strong>
+                      <span>{session.message_count} 条消息</span>
+                    </article>
+                  ))
+                ) : (
+                  <p>暂无问答记录</p>
+                )}
+              </section>
+
+              <section className="persistence-group" aria-label="评估记录">
+                <h4>评估记录</h4>
+                {evaluationRuns.length > 0 ? (
+                  evaluationRuns.slice(0, 3).map((run) => (
+                    <article className="persistence-row evaluation-row" key={run.id}>
+                      <strong>
+                        {run.mode} · {run.case_count} cases
+                      </strong>
+                      <span>命中 {run.source_hit_rate.toFixed(2)}</span>
+                      <span>证据 {run.marker_hit_rate.toFixed(2)}</span>
+                      <span>拒答 {run.refusal_accuracy.toFixed(2)}</span>
+                    </article>
+                  ))
+                ) : (
+                  <p>暂无评估记录</p>
+                )}
+              </section>
+            </div>
+          </section>
         </aside>
 
         <section className="chat-panel" aria-labelledby="chat-title">

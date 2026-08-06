@@ -611,6 +611,133 @@ describe('App chat workflow', () => {
   })
 })
 
+describe('App persistence workflow', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  test('renders saved chat sessions and evaluation summaries', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/sessions')) {
+        return makeJsonResponse([
+          {
+            id: 'session-1',
+            title: 'RAG 的回答来源如何展示？',
+            created_at: '2026-08-07T10:00:00Z',
+            updated_at: '2026-08-07T10:01:00Z',
+            message_count: 2,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/evaluations')) {
+        return makeJsonResponse([
+          {
+            id: 'eval-1',
+            created_at: '2026-08-07T10:02:00Z',
+            mode: 'baseline',
+            case_count: 15,
+            source_hit_rate: 1,
+            marker_hit_rate: 1,
+            refusal_accuracy: 1,
+            recommendation: null,
+            parameters: { top_k: 3 },
+          },
+        ])
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('最近问答')).toBeTruthy()
+    expect(await screen.findByText('RAG 的回答来源如何展示？')).toBeTruthy()
+    expect(screen.getByText('2 条消息')).toBeTruthy()
+    expect(screen.getByText('评估记录')).toBeTruthy()
+    expect(screen.getByText('baseline · 15 cases')).toBeTruthy()
+    expect(screen.getAllByText('命中 1.00')).toHaveLength(1)
+  })
+
+  test('exports and safely resets local persisted data', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/sessions')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/evaluations')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/admin/export')) {
+        return makeJsonResponse({
+          documents: [{ id: 'doc-1' }],
+          chat_sessions: [{ id: 'session-1' }],
+          evaluation_runs: [{ id: 'eval-1' }],
+        })
+      }
+
+      if (url.endsWith('/api/admin/reset') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          reset_chat_history: true,
+          reset_evaluations: true,
+          reset_documents: false,
+        })
+        return makeJsonResponse({
+          reset_chat_history: true,
+          reset_evaluations: true,
+          reset_documents: false,
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('本地数据')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: '导出数据' }))
+
+    expect(await screen.findByText('已导出：1 个文档，1 个问答，1 次评估')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: '安全清理' }))
+
+    expect(await screen.findByText('已清理问答和评估记录，文档保留')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/reset'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+})
+
 describe('App layout constraints', () => {
   test('keeps the initial empty conversation aligned to the top', async () => {
     const originalScrollHeight = Object.getOwnPropertyDescriptor(
@@ -663,7 +790,7 @@ describe('App layout constraints', () => {
     expect(appCss).toContain('height: 100dvh;')
     expect(appCss).toContain('overflow: hidden;')
     expect(appCss).toContain('grid-template-rows: auto minmax(0, 1fr);')
-    expect(appCss).toContain('grid-template-rows: auto auto minmax(0, 1fr);')
+    expect(appCss).toContain('grid-template-rows: auto auto minmax(0, 1fr) auto;')
     expect(appCss).toContain(
       'grid-template-rows: auto minmax(0, 0.82fr) minmax(150px, 0.32fr) minmax(100px, 0.26fr) auto;',
     )
