@@ -36,6 +36,20 @@ Phase 2 frontend demo flow is complete. The React app can connect to the local b
 
 Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database.
 
+## Architecture
+
+```text
+Browser UI (React + Vite)
+  -> FastAPI REST/SSE API
+  -> SQLite document metadata
+  -> File storage for uploaded documents
+  -> bge-m3 embeddings
+  -> ChromaDB vector store
+  -> DeepSeek Chat for grounded answers
+```
+
+The backend keeps business document state in SQLite and vector chunks in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
+
 ## Backend Development
 
 Create and activate the backend virtual environment:
@@ -284,3 +298,39 @@ curl.exe -s -X POST -F "file=@D:\path\to\notes.txt;type=text/plain" "http://127.
 ```
 
 Then refresh the frontend, confirm the document appears in the document list, ask a question, and check that the answer includes source citations.
+
+## Demo Script
+
+1. Start the backend and frontend.
+2. Upload a small PDF, TXT, or Markdown document.
+3. Watch the document status move from `uploaded` to `indexed`.
+4. Ask a document-specific question in the chat panel.
+5. Point out that the answer streams in progressively.
+6. Expand a citation to show the exact chunk, page, score, and source text.
+7. Ask an unrelated question and show the deterministic refusal: `根据当前知识库资料无法确定。`
+8. Open the retrieval debug panel to show which chunks were retrieved before generation.
+
+## Engineering Highlights
+
+- Backend-first RAG loop with upload, parsing, chunking, embedding, retrieval, answer generation, and citations.
+- SQLite stores business document metadata while ChromaDB stores vector chunks.
+- Explicit lifecycle states make document processing observable: `uploaded`, `indexed`, `failed`, and `deleted`.
+- Deletion keeps metadata, uploaded files, and vector chunks consistent.
+- Retrieval quality is measured with a repeatable offline fixture and parameter sweep.
+- Low-relevance refusal prevents weakly grounded LLM calls.
+- Server-Sent Events stream answer tokens for a more responsive local demo.
+- Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
+
+## Key Tradeoffs
+
+- ChromaDB remains the vector store because the current project has a narrow local retrieval surface and the evaluation fixture already reaches 1.0 on source hit, marker hit, and refusal accuracy.
+- The production chat path stays retrieval-only because the evaluation-only reranker produced no metric lift on the current fixture.
+- Document processing uses FastAPI `BackgroundTasks` instead of Celery or Redis to keep the first production-style version simple and runnable locally.
+- Docker source files are present, but Docker runtime build/up verification is skipped until the local Docker Hub or registry mirror path is reliable.
+
+## Resume Bullets
+
+- Built a local RAG knowledge-base app with FastAPI, React, ChromaDB, SQLite, DeepSeek Chat, and `bge-m3` embeddings.
+- Implemented document upload, asynchronous indexing, semantic retrieval, low-confidence refusal, streaming chat output, and expandable source citations.
+- Added repeatable RAG evaluation with fixture-based source-hit, marker-hit, and refusal-accuracy metrics, then tuned retrieval defaults from measured results.
+- Hardened document lifecycle consistency across SQLite metadata, uploaded files, and vector-store chunks, including deletion and failed-processing states.
