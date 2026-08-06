@@ -212,9 +212,9 @@ cd backend
 
 The sweep ranks configurations by source hit rate, marker hit rate, refusal accuracy, then smaller `top_k` and `chunk_size` for a leaner context.
 
-The current expanded fixture has 15 cases covering upload chunking, low-evidence refusal, Docker demo notes, Phase 3 configuration/SQLite lifecycle behavior, frontend retrieval evidence, citation expansion, roadmap boundaries, an English lifecycle question, and unrelated-question refusal.
+The current expanded fixture has 20 cases covering upload chunking, low-evidence refusal, Docker demo notes, Phase 3 configuration/SQLite lifecycle behavior, frontend retrieval evidence, citation expansion, roadmap boundaries, an English lifecycle question, unrelated-question refusal, and Phase 7 pressure cases for short ambiguous questions, exact keywords, follow-up phrasing, and advanced RAG scope boundaries.
 
-On this expanded fixture, the best measured configuration is `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`, with source hit rate, marker hit rate, and refusal accuracy all at `1.0`. These values are now the backend defaults and can still be overridden with `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_DEFAULT_TOP_K`, and `RAG_MIN_RELEVANCE_SCORE`.
+On the earlier 15-case fixture, the best measured configuration was `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`; these values are now the backend defaults and can still be overridden with `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_DEFAULT_TOP_K`, and `RAG_MIN_RELEVANCE_SCORE`. The current 20-case Phase 7 fixture keeps source hit rate and refusal accuracy at `1.0`, while marker hit rate is `0.85`, exposing harder evidence-selection gaps for future advanced RAG work.
 
 Run a retrieval-only versus reranked comparison:
 
@@ -223,7 +223,7 @@ cd backend
 .\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-reranker --top-k 3 --initial-top-k 5
 ```
 
-The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 15-case fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow.
+The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 20-case Phase 7 fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow until a future approach improves the measured evidence-selection gap.
 
 List saved evaluation run summaries:
 
@@ -391,8 +391,9 @@ Then refresh the frontend, confirm the document appears in the document list, as
 
 ## Key Tradeoffs
 
-- ChromaDB remains the vector store because the current project has a narrow local retrieval surface and the evaluation fixture already reaches 1.0 on source hit, marker hit, and refusal accuracy.
-- The production chat path stays retrieval-only because the evaluation-only reranker produced no metric lift on the current fixture.
+- ChromaDB remains the vector store because the current project has a narrow local retrieval surface and source-hit coverage remains strong.
+- The production chat path stays retrieval-only because the evaluation-only reranker produced no metric lift on the current 20-case fixture.
+- Phase 7 advanced RAG work starts with harder evaluation cases before implementing hybrid search, query rewrite, or multi-turn conversational RAG.
 - Document processing uses FastAPI `BackgroundTasks` instead of Celery or Redis to keep the first production-style version simple and runnable locally.
 - Docker source files are present, but Docker runtime build/up verification is skipped until the local Docker Hub or registry mirror path is reliable.
 

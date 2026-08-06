@@ -103,5 +103,40 @@
     "expected_filename": null,
     "expected_marker": null,
     "expect_refusal": true
+  },
+  {
+    "id": "short_ambiguous_vector_store",
+    "question": "向量库先保留哪个？",
+    "expected_filename": "phase7_advanced_rag.md",
+    "expected_marker": "keep ChromaDB until Phase 7 evidence",
+    "expect_refusal": false
+  },
+  {
+    "id": "keyword_exact_bge_m3",
+    "question": "bge-m3 在这个项目里是什么定位？",
+    "expected_filename": "phase7_advanced_rag.md",
+    "expected_marker": "primary embedding direction remains bge-m3",
+    "expect_refusal": false
+  },
+  {
+    "id": "conversational_followup_reset",
+    "question": "那安全清理会删文档吗？",
+    "expected_filename": "phase7_advanced_rag.md",
+    "expected_marker": "Safe reset refuses document deletion",
+    "expect_refusal": false
+  },
+  {
+    "id": "similar_document_interference",
+    "question": "高级 RAG 和 Qdrant 迁移的边界是什么？",
+    "expected_filename": "phase7_advanced_rag.md",
+    "expected_marker": "Advanced RAG is evaluated before implementation",
+    "expect_refusal": false
+  },
+  {
+    "id": "query_rewrite_scope_boundary",
+    "question": "什么时候才考虑 query rewrite？",
+    "expected_filename": "phase7_advanced_rag.md",
+    "expected_marker": "Query rewrite should be considered only after ambiguous question failures are measured",
+    "expect_refusal": false
   }
 ]

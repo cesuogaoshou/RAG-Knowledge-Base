@@ -168,6 +168,22 @@ def test_default_evaluation_fixture_covers_core_project_behaviors() -> None:
     assert sum(1 for case in cases if case.expect_refusal) >= 3
 
 
+def test_default_evaluation_fixture_includes_phase7_advanced_rag_pressure_cases() -> None:
+    cases = load_cases(Path(__file__).parents[1] / "evaluation" / "fixtures" / "cases.json")
+    case_ids = {case.id for case in cases}
+    filenames = {case.expected_filename for case in cases if case.expected_filename is not None}
+
+    assert len(cases) >= 20
+    assert {
+        "short_ambiguous_vector_store",
+        "keyword_exact_bge_m3",
+        "conversational_followup_reset",
+        "similar_document_interference",
+        "query_rewrite_scope_boundary",
+    }.issubset(case_ids)
+    assert "phase7_advanced_rag.md" in filenames
+
+
 def test_main_prints_json_report(monkeypatch, capsys, tmp_path: Path) -> None:
     cases_path = tmp_path / "cases.json"
     documents_dir = tmp_path / "documents"
