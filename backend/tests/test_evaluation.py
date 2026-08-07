@@ -5,6 +5,7 @@ from app.schemas.search import SearchResult
 from evaluation.evaluate_retrieval import (
     EvaluationCase,
     EvaluationParameters,
+    HeuristicQueryRewriter,
     KeywordOverlapReranker,
     StaticQueryRewriter,
     evaluate_case,
@@ -12,6 +13,7 @@ from evaluation.evaluate_retrieval import (
     main,
     rank_parameter_reports,
     run_evaluation,
+    run_heuristic_query_rewrite_comparison,
     run_parameter_sweep,
     run_query_rewrite_comparison,
     run_reranker_comparison,
@@ -418,6 +420,34 @@ def test_static_query_rewriter_expands_known_phase7_pressure_question() -> None:
     assert rewritten == "Phase 7 evidence shows which vector store should keep ChromaDB before migration?"
 
 
+def test_heuristic_query_rewriter_expands_project_retrieval_questions_without_exact_match() -> None:
+    rewriter = HeuristicQueryRewriter()
+
+    rewritten = rewriter.rewrite("这个向量数据库到底保留啥")
+
+    assert "ChromaDB" in rewritten
+    assert "Phase 7" in rewritten
+    assert "migration evidence" in rewritten
+
+
+def test_heuristic_query_rewriter_expands_safe_reset_followups_without_exact_match() -> None:
+    rewriter = HeuristicQueryRewriter()
+
+    rewritten = rewriter.rewrite("那清理会不会删掉资料")
+
+    assert "safe reset" in rewritten
+    assert "refuses document deletion" in rewritten
+    assert "explicit document delete path" in rewritten
+
+
+def test_heuristic_query_rewriter_keeps_unrelated_questions_unchanged() -> None:
+    rewriter = HeuristicQueryRewriter()
+
+    question = "明天上海天气怎么样？"
+
+    assert rewriter.rewrite(question) == question
+
+
 def test_run_query_rewrite_comparison_reports_metric_deltas(monkeypatch, tmp_path: Path) -> None:
     calls: list[dict[str, object]] = []
 
@@ -458,6 +488,51 @@ def test_run_query_rewrite_comparison_reports_metric_deltas(monkeypatch, tmp_pat
     assert report["delta"] == {
         "source_hit_rate": 0.0,
         "marker_hit_rate": 0.15,
+        "refusal_accuracy": 0.0,
+    }
+    assert report["recommendation"] == "consider_query_rewrite"
+
+
+def test_run_heuristic_query_rewrite_comparison_reports_metric_deltas(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_evaluation(**kwargs):
+        calls.append(kwargs)
+        summary = (
+            {
+                "case_count": 20,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 0.95,
+                "refusal_accuracy": 1.0,
+            }
+            if kwargs["query_rewriter"] is not None
+            else {
+                "case_count": 20,
+                "source_hit_rate": 1.0,
+                "marker_hit_rate": 0.85,
+                "refusal_accuracy": 1.0,
+            }
+        )
+        return {"summary": summary, "outcomes": []}
+
+    monkeypatch.setattr("evaluation.evaluate_retrieval.run_evaluation", fake_run_evaluation)
+
+    report = run_heuristic_query_rewrite_comparison(
+        cases_path=tmp_path / "cases.json",
+        documents_dir=tmp_path / "documents",
+        vector_store_root=tmp_path / "chroma-heuristic-query-rewrite",
+        chunk_size=400,
+        chunk_overlap=0,
+        top_k=3,
+        min_relevance_score=0.45,
+        embedding_service=KeywordEmbeddingService(),
+    )
+
+    assert calls[0]["query_rewriter"] is None
+    assert isinstance(calls[1]["query_rewriter"], HeuristicQueryRewriter)
+    assert report["delta"] == {
+        "source_hit_rate": 0.0,
+        "marker_hit_rate": 0.1,
         "refusal_accuracy": 0.0,
     }
     assert report["recommendation"] == "consider_query_rewrite"
@@ -549,6 +624,38 @@ def test_main_runs_query_rewrite_comparison(monkeypatch, capsys, tmp_path: Path)
             "--vector-store",
             str(tmp_path / "chroma"),
             "--compare-query-rewrite",
+            "--top-k",
+            "3",
+        ]
+    )
+
+    assert json.loads(capsys.readouterr().out)["recommendation"] == "keep_retrieval_only"
+
+
+def test_main_runs_heuristic_query_rewrite_comparison(monkeypatch, capsys, tmp_path: Path) -> None:
+    def fake_run_heuristic_query_rewrite_comparison(**kwargs):
+        assert kwargs["top_k"] == 3
+        return {
+            "baseline": {"summary": {"case_count": 0}, "outcomes": []},
+            "rewritten": {"summary": {"case_count": 0}, "outcomes": []},
+            "delta": {},
+            "recommendation": "keep_retrieval_only",
+        }
+
+    monkeypatch.setattr(
+        "evaluation.evaluate_retrieval.run_heuristic_query_rewrite_comparison",
+        fake_run_heuristic_query_rewrite_comparison,
+    )
+
+    main(
+        [
+            "--cases",
+            str(tmp_path / "cases.json"),
+            "--documents",
+            str(tmp_path / "documents"),
+            "--vector-store",
+            str(tmp_path / "chroma"),
+            "--compare-heuristic-query-rewrite",
             "--top-k",
             "3",
         ]

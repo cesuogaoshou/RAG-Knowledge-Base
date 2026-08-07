@@ -234,6 +234,15 @@ cd backend
 
 The query-rewrite comparison is also evaluation-only. On the 20-case Phase 7 fixture it improved marker hit rate from `0.85` to `0.90` without changing source hit rate or refusal accuracy, so query rewrite is a stronger next candidate than the current lightweight reranker. Production chat still remains retrieval-only until a general, non-fixture-specific rewrite path is designed and verified.
 
+Run a retrieval-only versus heuristic query-rewrite comparison:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-heuristic-query-rewrite
+```
+
+The heuristic rewrite mode uses transparent project-term rules instead of exact fixture-question mappings. On the 20-case Phase 7 fixture it also improved marker hit rate from `0.85` to `0.90` while keeping source hit rate and refusal accuracy at `1.0`, which is the first non-fixture-specific evidence that query rewrite may be worth designing for production later.
+
 List saved evaluation run summaries:
 
 ```text

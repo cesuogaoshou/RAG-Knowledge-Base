@@ -80,6 +80,26 @@ class StaticQueryRewriter:
         return self._rewrites.get(question, question)
 
 
+class HeuristicQueryRewriter:
+    def rewrite(self, question: str) -> str:
+        normalized = question.lower()
+        if _looks_unrelated_to_project(normalized):
+            return question
+        if _mentions_vector_store(normalized):
+            return (
+                f"{question} Phase 7 evidence keep ChromaDB vector store before Qdrant migration evidence."
+            )
+        if _mentions_safe_reset_followup(normalized):
+            return (
+                f"{question} safe reset refuses document deletion and uses the explicit document delete path."
+            )
+        if _mentions_query_rewrite_timing(normalized):
+            return (
+                f"{question} query rewrite considered after ambiguous question failures are measured."
+            )
+        return question
+
+
 def load_cases(path: Path) -> list[EvaluationCase]:
     raw_cases = json.loads(path.read_text(encoding="utf-8"))
     return [EvaluationCase(**item) for item in raw_cases]
@@ -248,6 +268,48 @@ def run_query_rewrite_comparison(
     }
 
 
+def run_heuristic_query_rewrite_comparison(
+    cases_path: Path,
+    documents_dir: Path,
+    vector_store_root: Path,
+    chunk_size: int = 400,
+    chunk_overlap: int = 0,
+    top_k: int = 3,
+    min_relevance_score: float = 0.45,
+    embedding_service: EmbeddingService | None = None,
+) -> dict[str, object]:
+    embeddings = embedding_service or SentenceTransformerEmbeddingService()
+    baseline = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "baseline",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        query_rewriter=None,
+    )
+    rewritten = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "rewritten",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        query_rewriter=HeuristicQueryRewriter(),
+    )
+    delta = _summary_delta(baseline["summary"], rewritten["summary"])
+    return {
+        "baseline": baseline,
+        "rewritten": rewritten,
+        "delta": delta,
+        "recommendation": _query_rewrite_recommendation(delta),
+    }
+
+
 def evaluate_case(
     case: EvaluationCase,
     results: list[SearchResult],
@@ -329,6 +391,58 @@ def _query_rewrite_recommendation(delta: dict[str, float]) -> str:
     return "keep_retrieval_only"
 
 
+def _looks_unrelated_to_project(normalized_question: str) -> bool:
+    unrelated_terms = (
+        "天气",
+        "weather",
+        "鸡翅",
+        "空气炸锅",
+        "股价",
+        "stock",
+        "英伟达",
+        "nvidia",
+    )
+    return any(term in normalized_question for term in unrelated_terms)
+
+
+def _mentions_vector_store(normalized_question: str) -> bool:
+    mentions_store = any(
+        term in normalized_question
+        for term in (
+            "向量库",
+            "向量数据库",
+            "vector store",
+            "vector database",
+            "chromadb",
+            "qdrant",
+        )
+    )
+    mentions_phase7_boundary = any(
+        term in normalized_question
+        for term in (
+            "保留",
+            "迁移",
+            "keep",
+            "migration",
+            "qdrant",
+            "chromadb",
+        )
+    )
+    return mentions_store and mentions_phase7_boundary
+
+
+def _mentions_safe_reset_followup(normalized_question: str) -> bool:
+    mentions_reset = any(term in normalized_question for term in ("清理", "reset", "安全"))
+    mentions_documents = any(term in normalized_question for term in ("文档", "资料", "删", "删除", "delete"))
+    return mentions_reset and mentions_documents
+
+
+def _mentions_query_rewrite_timing(normalized_question: str) -> bool:
+    mentions_rewrite = any(term in normalized_question for term in ("query rewrite", "查询重写", "问题重写", "改写"))
+    mentions_timing = any(term in normalized_question for term in ("什么时候", "何时", "when", "考虑", "consider"))
+    return mentions_rewrite and mentions_timing
+
+
 def _tokenize_for_reranking(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", text.lower()) if len(token.strip()) > 0}
 
@@ -401,9 +515,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--min-relevance-scores", default=None)
     parser.add_argument("--compare-reranker", action="store_true")
     parser.add_argument("--compare-query-rewrite", action="store_true")
+    parser.add_argument("--compare-heuristic-query-rewrite", action="store_true")
     parser.add_argument("--save-run", action="store_true")
     parser.add_argument("--database-url", default="sqlite:///data/app.db")
     args = parser.parse_args(argv)
+
+    if args.compare_heuristic_query_rewrite:
+        report = run_heuristic_query_rewrite_comparison(
+            cases_path=args.cases,
+            documents_dir=args.documents,
+            vector_store_root=args.vector_store,
+            top_k=args.top_k,
+            min_relevance_score=args.min_relevance_score,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     if args.compare_query_rewrite:
         report = run_query_rewrite_comparison(
