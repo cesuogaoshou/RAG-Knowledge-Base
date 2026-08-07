@@ -18,5 +18,7 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
+    retrieval_query: str
+    query_rewritten: bool
     top_k: int
     results: list[SearchResult]

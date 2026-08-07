@@ -17,6 +17,7 @@ from app.db.evaluation_repository import SQLEvaluationRepository
 from app.services.chat_service import ChatService, DeepSeekChatService
 from app.services.document_metadata_store import DocumentMetadataStore
 from app.services.embedding_service import EmbeddingService, SentenceTransformerEmbeddingService
+from app.services.query_rewriter import HeuristicQueryRewriter, NoopQueryRewriter
 from app.services.vector_store import ChromaVectorStore
 
 
@@ -58,6 +59,7 @@ def create_app(
     chat_repository = SQLChatRepository(session_factory)
     evaluation_repository = SQLEvaluationRepository(session_factory)
     resolved_embedding_service = embedding_service or SentenceTransformerEmbeddingService()
+    query_rewriter = HeuristicQueryRewriter() if resolved_settings.query_rewrite_enabled else NoopQueryRewriter()
     app.include_router(
         create_documents_router(
             upload_dir=upload_dir or resolved_settings.upload_dir,
@@ -73,6 +75,7 @@ def create_app(
             vector_store=resolved_vector_store,
             embedding_service=resolved_embedding_service,
             default_top_k=resolved_settings.default_top_k,
+            query_rewriter=query_rewriter,
         )
     )
     app.include_router(
@@ -83,6 +86,7 @@ def create_app(
             default_top_k=resolved_settings.default_top_k,
             min_relevance_score=resolved_settings.min_relevance_score,
             chat_repository=chat_repository,
+            query_rewriter=query_rewriter,
         )
     )
     app.include_router(create_chat_history_router(chat_repository))

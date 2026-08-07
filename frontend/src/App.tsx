@@ -17,6 +17,7 @@ import {
   type ChatSessionSummary,
   type DocumentSummary,
   type EvaluationRunSummary,
+  type QueryRewriteMetadata,
   type SourceCitation,
 } from './api/client'
 
@@ -55,6 +56,7 @@ function App() {
   const [retrievalStatus, setRetrievalStatus] = useState<LoadingStatus>('idle')
   const [retrievalMessage, setRetrievalMessage] = useState('输入问题后可查看召回片段')
   const [retrievalResults, setRetrievalResults] = useState<SourceCitation[]>([])
+  const [retrievalMetadata, setRetrievalMetadata] = useState<QueryRewriteMetadata | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const conversationRef = useRef<HTMLDivElement>(null)
 
@@ -250,6 +252,11 @@ function App() {
     try {
       const response = await searchDocuments({ question: trimmedQuestion, top_k: topK })
       setRetrievalResults(response.results)
+      setRetrievalMetadata({
+        query: response.query,
+        retrieval_query: response.retrieval_query,
+        query_rewritten: response.query_rewritten,
+      })
       setRetrievalStatus('success')
       setRetrievalMessage(
         response.results.length > 0 ? `已召回 ${response.results.length} 个片段` : '没有召回片段',
@@ -258,6 +265,7 @@ function App() {
       const message = error instanceof Error ? error.message : '检索失败，请稍后重试'
       setRetrievalStatus('error')
       setRetrievalMessage(message)
+      setRetrievalMetadata(null)
     }
   }
 
@@ -306,6 +314,9 @@ function App() {
           },
           onSources: (sources) => {
             setAnswerSources(sources)
+          },
+          onRetrieval: (metadata) => {
+            setRetrievalMetadata(metadata)
           },
         },
       )
@@ -580,6 +591,12 @@ function App() {
             <p className={`retrieval-state ${retrievalStatus}`} aria-live="polite">
               {retrievalMessage}
             </p>
+            {retrievalMetadata ? (
+              <div className="retrieval-query-debug" aria-label="检索问题改写状态">
+                <span>{retrievalMetadata.query_rewritten ? '已改写为' : '检索问题未改写'}</span>
+                <p>{retrievalMetadata.retrieval_query}</p>
+              </div>
+            ) : null}
             <div className="retrieval-list">
               {retrievalResults.length > 0
                 ? retrievalResults.map((result, index) => (

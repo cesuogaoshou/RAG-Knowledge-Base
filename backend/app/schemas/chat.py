@@ -14,3 +14,5 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[SearchResult]
     session_id: str | None = None
+    retrieval_query: str | None = None
+    query_rewritten: bool = False

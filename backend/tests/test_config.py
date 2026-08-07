@@ -65,6 +65,15 @@ def test_app_settings_uses_tuned_retrieval_defaults() -> None:
     assert settings.chunk_overlap == 0
     assert settings.default_top_k == 3
     assert settings.min_relevance_score == 0.45
+    assert settings.query_rewrite_enabled is False
+
+
+def test_app_settings_reads_query_rewrite_flag(monkeypatch) -> None:
+    monkeypatch.setenv("RAG_QUERY_REWRITE_ENABLED", "true")
+
+    settings = AppSettings()
+
+    assert settings.query_rewrite_enabled is True
 
 
 def test_create_app_uses_centralized_settings() -> None:

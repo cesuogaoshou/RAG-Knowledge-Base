@@ -436,6 +436,26 @@ h3 {
   font-weight: 700;
 }
 
+.retrieval-query-debug {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid #2563eb;
+  padding: 8px 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.82rem;
+}
+
+.retrieval-query-debug span {
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.retrieval-query-debug p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .document-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

@@ -551,6 +551,8 @@ describe('App chat workflow', () => {
 
         return makeJsonResponse({
           query: 'RAG 如何工作？',
+          retrieval_query: 'RAG 如何工作？ retrieval augmented generation evidence',
+          query_rewritten: true,
           top_k: 5,
           results: [
             {
@@ -576,8 +578,46 @@ describe('App chat workflow', () => {
     await userEvent.click(screen.getByRole('button', { name: '检索' }))
 
     expect(await screen.findByText('Chunk 3 · 第 2 页 · 相似度 0.812')).toBeTruthy()
+    expect(screen.getByText('已改写为')).toBeTruthy()
+    expect(screen.getByText(/retrieval augmented generation evidence/)).toBeTruthy()
     expect(screen.getAllByText('rag-notes.md').length).toBeGreaterThan(1)
     expect(screen.getByText('回答前先召回相关片段。')).toBeTruthy()
+  })
+
+  test('shows when retrieval debug query is not rewritten', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/health')) {
+        return makeJsonResponse({ status: 'ok', service: 'rag-knowledge-base-api' })
+      }
+
+      if (url.endsWith('/api/documents')) {
+        return makeJsonResponse([])
+      }
+
+      if (url.endsWith('/api/search') && init?.method === 'POST') {
+        return makeJsonResponse({
+          query: 'RAG 如何工作？',
+          retrieval_query: 'RAG 如何工作？',
+          query_rewritten: false,
+          top_k: 3,
+          results: [],
+        })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText('后端已连接')).toBeTruthy()
+
+    await userEvent.type(screen.getByLabelText('检索问题'), 'RAG 如何工作？')
+    await userEvent.click(screen.getByRole('button', { name: '检索' }))
+
+    expect(await screen.findByText('检索问题未改写')).toBeTruthy()
   })
 
   test('shows a retrieval debug error when search fails', async () => {

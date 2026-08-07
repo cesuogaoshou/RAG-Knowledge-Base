@@ -232,7 +232,7 @@ cd backend
 .\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-query-rewrite
 ```
 
-The query-rewrite comparison is also evaluation-only. On the 20-case Phase 7 fixture it improved marker hit rate from `0.85` to `0.90` without changing source hit rate or refusal accuracy, so query rewrite is a stronger next candidate than the current lightweight reranker. Production chat still remains retrieval-only until a general, non-fixture-specific rewrite path is designed and verified.
+The static query-rewrite comparison is evaluation-only. On the 20-case Phase 7 fixture it improved marker hit rate from `0.85` to `0.90` without changing source hit rate or refusal accuracy, so query rewrite became a stronger next candidate than the current lightweight reranker. `StaticQueryRewriter` is still fixture-specific and is not connected to production.
 
 Run a retrieval-only versus heuristic query-rewrite comparison:
 
@@ -241,7 +241,15 @@ cd backend
 .\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-heuristic-query-rewrite
 ```
 
-The heuristic rewrite mode uses transparent project-term rules instead of exact fixture-question mappings. On the 20-case Phase 7 fixture it also improved marker hit rate from `0.85` to `0.90` while keeping source hit rate and refusal accuracy at `1.0`, which is the first non-fixture-specific evidence that query rewrite may be worth designing for production later.
+The heuristic rewrite mode uses transparent project-term rules instead of exact fixture-question mappings. On the 20-case Phase 7 fixture it also improved marker hit rate from `0.85` to `0.90` while keeping source hit rate and refusal accuracy at `1.0`.
+
+Production query rewrite is available as an opt-in retrieval experiment:
+
+```text
+RAG_QUERY_REWRITE_ENABLED=false
+```
+
+When enabled, the backend applies a local deterministic heuristic rewrite before embedding the retrieval query. The original user question is still sent to the LLM and saved in chat history. `/api/search`, `/api/chat`, and `/api/chat/stream` expose retrieval query metadata so the frontend can show what was actually searched.
 
 List saved evaluation run summaries:
 
@@ -410,8 +418,8 @@ Then refresh the frontend, confirm the document appears in the document list, as
 ## Key Tradeoffs
 
 - ChromaDB remains the vector store because the current project has a narrow local retrieval surface and source-hit coverage remains strong.
-- The production chat path stays retrieval-only because the evaluation-only reranker produced no metric lift on the current 20-case fixture.
-- Phase 7 advanced RAG work starts with harder evaluation cases before implementing hybrid search, query rewrite, or multi-turn conversational RAG.
+- The production chat path keeps query rewrite disabled by default; the opt-in heuristic rewrite is local, transparent, and only changes the retrieval query.
+- Phase 7 advanced RAG work starts with harder evaluation cases before implementing hybrid search or multi-turn conversational RAG.
 - Document processing uses FastAPI `BackgroundTasks` instead of Celery or Redis to keep the first production-style version simple and runnable locally.
 - Docker source files are present, but Docker runtime build/up verification is skipped until the local Docker Hub or registry mirror path is reliable.
 

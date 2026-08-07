@@ -10,6 +10,7 @@ from app.schemas.chat_history import ChatMessageCreate
 from app.schemas.search import SearchResult
 from app.services.chat_service import ChatService
 from app.services.embedding_service import EmbeddingService
+from app.services.query_rewriter import NoopQueryRewriter, QueryRewriteResult, QueryRewriter, safe_rewrite_query
 from app.services.vector_store import ChromaVectorStore
 
 
@@ -24,12 +25,15 @@ def create_chat_router(
     default_top_k: int = 5,
     min_relevance_score: float = DEFAULT_MIN_RELEVANCE_SCORE,
     chat_repository: SQLChatRepository | None = None,
+    query_rewriter: QueryRewriter | None = None,
 ) -> APIRouter:
     router = APIRouter(tags=["chat"])
+    resolved_query_rewriter = query_rewriter or NoopQueryRewriter()
 
     @router.post("/api/chat", response_model=ChatResponse)
     def chat(request: ChatRequest) -> ChatResponse:
-        query_embedding = embedding_service.embed_texts([request.question])[0]
+        rewrite_result = safe_rewrite_query(resolved_query_rewriter, request.question)
+        query_embedding = embedding_service.embed_texts([rewrite_result.retrieval_query])[0]
         top_k = request.top_k if request.top_k is not None else default_top_k
         sources = vector_store.search(query_embedding=query_embedding, top_k=top_k)
         if _has_insufficient_evidence(sources, min_relevance_score):
@@ -40,7 +44,13 @@ def create_chat_router(
                 top_k=top_k,
                 sources=[],
             )
-            return ChatResponse(answer=INSUFFICIENT_EVIDENCE_ANSWER, sources=[], session_id=session_id)
+            return ChatResponse(
+                answer=INSUFFICIENT_EVIDENCE_ANSWER,
+                sources=[],
+                session_id=session_id,
+                retrieval_query=rewrite_result.retrieval_query,
+                query_rewritten=rewrite_result.query_rewritten,
+            )
 
         answer = chat_service.answer(question=request.question, sources=sources)
         display_sources = _deduplicate_sources_by_file_page(sources)
@@ -51,11 +61,18 @@ def create_chat_router(
             top_k=top_k,
             sources=display_sources,
         )
-        return ChatResponse(answer=answer, sources=display_sources, session_id=session_id)
+        return ChatResponse(
+            answer=answer,
+            sources=display_sources,
+            session_id=session_id,
+            retrieval_query=rewrite_result.retrieval_query,
+            query_rewritten=rewrite_result.query_rewritten,
+        )
 
     @router.post("/api/chat/stream")
     def chat_stream(request: ChatRequest) -> StreamingResponse:
-        query_embedding = embedding_service.embed_texts([request.question])[0]
+        rewrite_result = safe_rewrite_query(resolved_query_rewriter, request.question)
+        query_embedding = embedding_service.embed_texts([rewrite_result.retrieval_query])[0]
         top_k = request.top_k if request.top_k is not None else default_top_k
         sources = vector_store.search(query_embedding=query_embedding, top_k=top_k)
         if _has_insufficient_evidence(sources, min_relevance_score):
@@ -64,6 +81,7 @@ def create_chat_router(
                     chat_repository=chat_repository,
                     question=request.question,
                     top_k=top_k,
+                    rewrite_result=rewrite_result,
                 ),
                 media_type="text/event-stream",
             )
@@ -76,6 +94,7 @@ def create_chat_router(
                 chat_repository=chat_repository,
                 question=request.question,
                 top_k=top_k,
+                rewrite_result=rewrite_result,
             ),
             media_type="text/event-stream",
         )
@@ -87,7 +106,9 @@ def _stream_refusal_events(
     chat_repository: SQLChatRepository | None,
     question: str,
     top_k: int,
+    rewrite_result: QueryRewriteResult,
 ) -> Iterator[str]:
+    yield _format_retrieval_sse(rewrite_result)
     yield _format_sse("token", {"delta": INSUFFICIENT_EVIDENCE_ANSWER})
     yield _format_sse("sources", {"sources": []})
     session_id = _persist_chat_turn(
@@ -108,8 +129,10 @@ def _stream_chat_events(
     chat_repository: SQLChatRepository | None,
     question: str,
     top_k: int,
+    rewrite_result: QueryRewriteResult,
 ) -> Iterator[str]:
     answer_parts: list[str] = []
+    yield _format_retrieval_sse(rewrite_result)
     for token in tokens:
         answer_parts.append(token)
         yield _format_sse("token", {"delta": token})
@@ -128,6 +151,17 @@ def _stream_chat_events(
 
 def _format_sse(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _format_retrieval_sse(rewrite_result: QueryRewriteResult) -> str:
+    return _format_sse(
+        "retrieval",
+        {
+            "query": rewrite_result.original_query,
+            "retrieval_query": rewrite_result.retrieval_query,
+            "query_rewritten": rewrite_result.query_rewritten,
+        },
+    )
 
 
 def _has_insufficient_evidence(sources: list[SearchResult], min_relevance_score: float) -> bool:

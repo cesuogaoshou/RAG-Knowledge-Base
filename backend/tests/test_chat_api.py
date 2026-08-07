@@ -4,12 +4,17 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.core.config import AppSettings
 from app.main import create_app
 from app.schemas.search import SearchResult
 
 
 class KeywordEmbeddingService:
+    def __init__(self) -> None:
+        self.embedded_texts: list[str] = []
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.embedded_texts.extend(texts)
         embeddings: list[list[float]] = []
         for text in texts:
             normalized = text.lower()
@@ -18,6 +23,7 @@ class KeywordEmbeddingService:
                     1.0 if "rag" in normalized else 0.0,
                     1.0 if "database" in normalized else 0.0,
                     1.0 if "recipe" in normalized else 0.0,
+                    1.0 if "chromadb" in normalized else 0.0,
                 ]
             )
         return embeddings
@@ -291,5 +297,89 @@ def test_chat_rejects_blank_question() -> None:
         response = client.post("/api/chat", json={"question": " ", "top_k": 1})
 
         assert response.status_code == 422
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_uses_rewritten_retrieval_query_but_keeps_original_llm_question() -> None:
+    workspace = _workspace_dir()
+    embedding_service = KeywordEmbeddingService()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                settings=AppSettings(query_rewrite_enabled=True, min_relevance_score=0.0),
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=embedding_service,
+                chat_service=chat_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "phase7.md",
+                    b"Phase 7 evidence says keep ChromaDB before Qdrant migration.",
+                    "text/markdown",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        response = client.post("/api/chat", json={"question": "向量库先保留哪个？", "top_k": 1})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["query_rewritten"] is True
+        assert "ChromaDB" in body["retrieval_query"]
+        assert chat_service.last_question == "向量库先保留哪个？"
+        assert any("ChromaDB" in text for text in embedding_service.embedded_texts)
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_chat_stream_emits_retrieval_metadata_event() -> None:
+    workspace = _workspace_dir()
+    chat_service = FakeChatService()
+    try:
+        client = TestClient(
+            create_app(
+                settings=AppSettings(query_rewrite_enabled=True, min_relevance_score=0.0),
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=KeywordEmbeddingService(),
+                chat_service=chat_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+        upload_response = client.post(
+            "/api/documents/upload",
+            files={
+                "file": (
+                    "phase7.md",
+                    b"Phase 7 evidence says keep ChromaDB before Qdrant migration.",
+                    "text/markdown",
+                )
+            },
+        )
+        assert upload_response.status_code == 201
+
+        with client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={"question": "向量库先保留哪个？", "top_k": 1},
+        ) as response:
+            assert response.status_code == 200
+            body = response.read().decode("utf-8")
+
+        assert "event: retrieval" in body
+        assert '"query": "向量库先保留哪个？"' in body
+        assert '"query_rewritten": true' in body
+        assert "ChromaDB" in body
+        assert chat_service.last_question == "向量库先保留哪个？"
     finally:
         shutil.rmtree(workspace, ignore_errors=True)

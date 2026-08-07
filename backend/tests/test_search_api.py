@@ -4,11 +4,16 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.core.config import AppSettings
 from app.main import create_app
 
 
 class KeywordEmbeddingService:
+    def __init__(self) -> None:
+        self.embedded_texts: list[str] = []
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.embedded_texts.extend(texts)
         embeddings: list[list[float]] = []
         for text in texts:
             normalized = text.lower()
@@ -17,6 +22,7 @@ class KeywordEmbeddingService:
                     1.0 if "rag" in normalized else 0.0,
                     1.0 if "database" in normalized else 0.0,
                     1.0 if "recipe" in normalized else 0.0,
+                    1.0 if "chromadb" in normalized else 0.0,
                 ]
             )
         return embeddings
@@ -83,5 +89,59 @@ def test_search_rejects_blank_question() -> None:
         response = client.post("/api/search", json={"question": "   ", "top_k": 3})
 
         assert response.status_code == 422
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_search_reports_unmodified_query_when_rewrite_is_disabled() -> None:
+    workspace = _workspace_dir()
+    embedding_service = KeywordEmbeddingService()
+    try:
+        client = TestClient(
+            create_app(
+                settings=AppSettings(query_rewrite_enabled=False),
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=embedding_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+
+        response = client.post("/api/search", json={"question": "向量库先保留哪个？", "top_k": 1})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["query"] == "向量库先保留哪个？"
+        assert body["retrieval_query"] == "向量库先保留哪个？"
+        assert body["query_rewritten"] is False
+        assert "向量库先保留哪个？" in embedding_service.embedded_texts
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
+def test_search_uses_rewritten_query_when_rewrite_is_enabled() -> None:
+    workspace = _workspace_dir()
+    embedding_service = KeywordEmbeddingService()
+    try:
+        client = TestClient(
+            create_app(
+                settings=AppSettings(query_rewrite_enabled=True),
+                upload_dir=workspace / "uploads",
+                vector_store_dir=workspace / "chroma_db",
+                embedding_service=embedding_service,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+        )
+
+        response = client.post("/api/search", json={"question": "向量库先保留哪个？", "top_k": 1})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["query"] == "向量库先保留哪个？"
+        assert "ChromaDB" in body["retrieval_query"]
+        assert body["query_rewritten"] is True
+        assert any("ChromaDB" in text for text in embedding_service.embedded_texts)
     finally:
         shutil.rmtree(workspace, ignore_errors=True)

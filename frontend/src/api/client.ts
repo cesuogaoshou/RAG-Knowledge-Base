@@ -36,14 +36,24 @@ export type SourceCitation = {
   score: number
 }
 
+export type QueryRewriteMetadata = {
+  query: string
+  retrieval_query: string
+  query_rewritten: boolean
+}
+
 export type ChatResponse = {
   answer: string
   sources: SourceCitation[]
   session_id?: string | null
+  retrieval_query?: string | null
+  query_rewritten?: boolean
 }
 
 export type SearchResponse = {
   query: string
+  retrieval_query: string
+  query_rewritten: boolean
   top_k: number
   results: SourceCitation[]
 }
@@ -90,6 +100,7 @@ type ChatRequest = {
 type StreamQuestionHandlers = {
   onToken: (delta: string) => void
   onSources: (sources: SourceCitation[]) => void
+  onRetrieval?: (metadata: QueryRewriteMetadata) => void
 }
 
 type ApiErrorBody = {
@@ -290,6 +301,14 @@ function parseSseBuffer(buffer: string, handlers: StreamQuestionHandlers): strin
     }
     if (eventName === 'sources' && Array.isArray(data.sources)) {
       handlers.onSources(data.sources as SourceCitation[])
+    }
+    if (
+      eventName === 'retrieval' &&
+      typeof data.query === 'string' &&
+      typeof data.retrieval_query === 'string' &&
+      typeof data.query_rewritten === 'boolean'
+    ) {
+      handlers.onRetrieval?.(data as QueryRewriteMetadata)
     }
   }
 
