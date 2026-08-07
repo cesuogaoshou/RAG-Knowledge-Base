@@ -225,6 +225,15 @@ cd backend
 
 The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 20-case Phase 7 fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow until a future approach improves the measured evidence-selection gap.
 
+Run a retrieval-only versus static query-rewrite comparison:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-query-rewrite
+```
+
+The query-rewrite comparison is also evaluation-only. On the 20-case Phase 7 fixture it improved marker hit rate from `0.85` to `0.90` without changing source hit rate or refusal accuracy, so query rewrite is a stronger next candidate than the current lightweight reranker. Production chat still remains retrieval-only until a general, non-fixture-specific rewrite path is designed and verified.
+
 List saved evaluation run summaries:
 
 ```text

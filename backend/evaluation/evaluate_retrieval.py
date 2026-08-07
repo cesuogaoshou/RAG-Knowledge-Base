@@ -51,6 +51,11 @@ class Reranker(Protocol):
         pass
 
 
+class QueryRewriter(Protocol):
+    def rewrite(self, question: str) -> str:
+        pass
+
+
 class KeywordOverlapReranker:
     def rerank(self, question: str, results: list[SearchResult]) -> list[SearchResult]:
         query_terms = _tokenize_for_reranking(question)
@@ -59,6 +64,20 @@ class KeywordOverlapReranker:
             key=lambda result: (_overlap_count(query_terms, result.content), result.score),
             reverse=True,
         )
+
+
+class StaticQueryRewriter:
+    def __init__(self) -> None:
+        self._rewrites = {
+            "向量库先保留哪个？": "Phase 7 evidence shows which vector store should keep ChromaDB before migration?",
+            "那安全清理会删文档吗？": "Safe reset refuses document deletion and document removal uses the explicit document delete path.",
+            "什么时候才考虑 query rewrite？": (
+                "Query rewrite should be considered only after ambiguous question failures are measured."
+            ),
+        }
+
+    def rewrite(self, question: str) -> str:
+        return self._rewrites.get(question, question)
 
 
 def load_cases(path: Path) -> list[EvaluationCase]:
@@ -77,6 +96,7 @@ def run_evaluation(
     min_relevance_score: float = 0.45,
     initial_top_k: int | None = None,
     reranker: Reranker | None = None,
+    query_rewriter: QueryRewriter | None = None,
 ) -> dict[str, object]:
     if vector_store_dir.exists():
         shutil.rmtree(vector_store_dir)
@@ -100,7 +120,8 @@ def run_evaluation(
     cases = load_cases(cases_path)
     outcomes: list[EvaluationOutcome] = []
     for case in cases:
-        query_embedding = embeddings.embed_texts([case.question])[0]
+        retrieval_question = query_rewriter.rewrite(case.question) if query_rewriter else case.question
+        query_embedding = embeddings.embed_texts([retrieval_question])[0]
         retrieved_results = vector_store.search(query_embedding=query_embedding, top_k=initial_top_k or top_k)
         results = reranker.rerank(case.question, retrieved_results)[:top_k] if reranker else retrieved_results
         outcomes.append(evaluate_case(case, results, min_relevance_score=min_relevance_score))
@@ -185,6 +206,48 @@ def run_reranker_comparison(
     }
 
 
+def run_query_rewrite_comparison(
+    cases_path: Path,
+    documents_dir: Path,
+    vector_store_root: Path,
+    chunk_size: int = 400,
+    chunk_overlap: int = 0,
+    top_k: int = 3,
+    min_relevance_score: float = 0.45,
+    embedding_service: EmbeddingService | None = None,
+) -> dict[str, object]:
+    embeddings = embedding_service or SentenceTransformerEmbeddingService()
+    baseline = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "baseline",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        query_rewriter=None,
+    )
+    rewritten = run_evaluation(
+        cases_path=cases_path,
+        documents_dir=documents_dir,
+        vector_store_dir=vector_store_root / "rewritten",
+        embedding_service=embeddings,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        top_k=top_k,
+        min_relevance_score=min_relevance_score,
+        query_rewriter=StaticQueryRewriter(),
+    )
+    delta = _summary_delta(baseline["summary"], rewritten["summary"])
+    return {
+        "baseline": baseline,
+        "rewritten": rewritten,
+        "delta": delta,
+        "recommendation": _query_rewrite_recommendation(delta),
+    }
+
+
 def evaluate_case(
     case: EvaluationCase,
     results: list[SearchResult],
@@ -247,7 +310,7 @@ def _summary_delta(baseline: object, reranked: object) -> dict[str, float]:
     if not isinstance(baseline, dict) or not isinstance(reranked, dict):
         raise TypeError("baseline and reranked summaries must be dictionaries")
     return {
-        metric: float(reranked[metric]) - float(baseline[metric])
+        metric: round(float(reranked[metric]) - float(baseline[metric]), 10)
         for metric in ("source_hit_rate", "marker_hit_rate", "refusal_accuracy")
     }
 
@@ -256,6 +319,13 @@ def _reranker_recommendation(delta: dict[str, float]) -> str:
     values = list(delta.values())
     if any(value > 0 for value in values) and all(value >= 0 for value in values):
         return "consider_reranker"
+    return "keep_retrieval_only"
+
+
+def _query_rewrite_recommendation(delta: dict[str, float]) -> str:
+    values = list(delta.values())
+    if any(value > 0 for value in values) and all(value >= 0 for value in values):
+        return "consider_query_rewrite"
     return "keep_retrieval_only"
 
 
@@ -330,9 +400,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--top-ks", default=None)
     parser.add_argument("--min-relevance-scores", default=None)
     parser.add_argument("--compare-reranker", action="store_true")
+    parser.add_argument("--compare-query-rewrite", action="store_true")
     parser.add_argument("--save-run", action="store_true")
     parser.add_argument("--database-url", default="sqlite:///data/app.db")
     args = parser.parse_args(argv)
+
+    if args.compare_query_rewrite:
+        report = run_query_rewrite_comparison(
+            cases_path=args.cases,
+            documents_dir=args.documents,
+            vector_store_root=args.vector_store,
+            top_k=args.top_k,
+            min_relevance_score=args.min_relevance_score,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     if args.compare_reranker:
         report = run_reranker_comparison(
