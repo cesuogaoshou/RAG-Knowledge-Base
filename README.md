@@ -34,7 +34,9 @@ Phase 1 backend closed loop is complete. The backend currently exposes health ch
 
 Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
 
-Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 has added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database. Phase 6 has started with SQLite-backed chat session, answer-source, and evaluation run history.
+Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database.
+
+Phase 6 data persistence is complete for the local demo: chat sessions, assistant messages, displayed answer citations, evaluation run summaries, export, and safe reset are stored in SQLite. Phase 7 has added evaluation-backed query rewrite exploration, a default-off production heuristic rewrite path, and a repeatable demo-data seeding command so local UI demos can start from a clean indexed corpus.
 
 ## Architecture
 
@@ -49,6 +51,8 @@ Browser UI (React + Vite)
 ```
 
 The backend keeps business document state, chat history, saved answer citations, and evaluation run summaries in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
+
+For live demos, the checked-in evaluation fixture documents can be seeded into the local SQLite and ChromaDB runtime stores with one CLI command. Query rewrite remains opt-in and observable: when enabled, it changes only the retrieval query and keeps the original user question for generation and chat history.
 
 ## Backend Development
 
@@ -425,17 +429,20 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Explicit lifecycle states make document processing observable: `uploaded`, `indexed`, `failed`, and `deleted`.
 - Deletion keeps metadata, uploaded files, and vector chunks consistent.
 - Retrieval quality is measured with a repeatable offline fixture and parameter sweep.
+- Demo data can be rebuilt from checked-in fixtures with a backend CLI so local demos are repeatable.
 - Low-relevance refusal prevents weakly grounded LLM calls.
 - Server-Sent Events stream answer tokens for a more responsive local demo.
 - SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
 - Evaluation run summaries can be saved and reviewed later from SQLite.
 - Local export and safe reset controls make demo data easier to inspect and clean without adding user accounts or admin roles.
+- Optional heuristic query rewrite is default-off, measured by the same fixture, and visible in retrieval debug metadata.
 - Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
 
 ## Key Tradeoffs
 
 - ChromaDB remains the vector store because the current project has a narrow local retrieval surface and source-hit coverage remains strong.
 - The production chat path keeps query rewrite disabled by default; the opt-in heuristic rewrite is local, transparent, and only changes the retrieval query.
+- Demo data seeding resets local document runtime stores by design; it is a developer/demo CLI, not an authenticated admin feature.
 - Phase 7 advanced RAG work starts with harder evaluation cases before implementing hybrid search or multi-turn conversational RAG.
 - Document processing uses FastAPI `BackgroundTasks` instead of Celery or Redis to keep the first production-style version simple and runnable locally.
 - Docker source files are present, but Docker runtime build/up verification is skipped until the local Docker Hub or registry mirror path is reliable.
@@ -446,3 +453,4 @@ Then refresh the frontend, confirm the document appears in the document list, as
 - Implemented document upload, asynchronous indexing, semantic retrieval, low-confidence refusal, streaming chat output, persisted chat history, and expandable source citations.
 - Added repeatable RAG evaluation with fixture-based source-hit, marker-hit, and refusal-accuracy metrics, then tuned retrieval defaults from measured results.
 - Hardened document lifecycle consistency across SQLite metadata, uploaded files, and vector-store chunks, including deletion and failed-processing states.
+- Added an evaluation-backed, default-off query rewrite path and a demo-data seeding CLI for repeatable local presentations.
