@@ -375,6 +375,23 @@ The first real embedding request can still be slow because `bge-m3` may need to 
 
 Start the backend first, then start the frontend in a second terminal.
 
+Prepare a clean local demo corpus from the checked-in evaluation fixtures:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.cli.seed_demo_data --reset-documents
+```
+
+This rebuilds local SQLite document metadata, copied uploaded files, and the ChromaDB vector index from `backend/evaluation/fixtures/documents`. It is useful when `/api/documents` has records but retrieval returns no chunks because the ignored local ChromaDB data was cleaned or recreated.
+
+For a demo that highlights the optional Phase 7 query-rewrite path, set this in `backend\.env` before starting the backend:
+
+```text
+RAG_QUERY_REWRITE_ENABLED=true
+```
+
+Keep the default off for normal development. The measured benefit is narrow: it improves short ambiguous retrieval cases in the local fixture without changing the original user question sent to the LLM.
+
 Confirm both services are reachable:
 
 ```powershell
