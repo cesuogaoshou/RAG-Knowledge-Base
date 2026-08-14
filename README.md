@@ -1,62 +1,70 @@
 # RAG Knowledge Base
 
-A backend-first RAG document question-answering project.
+一个面向本地演示和简历展示的 RAG 文档问答项目。项目以 FastAPI 后端为核心，支持上传 PDF/TXT/Markdown 文档、切分文本、生成向量、语义检索，并用 DeepSeek Chat 基于检索结果生成带来源引用的回答。
 
-## Goal
+## 项目定位
 
-Build a local document knowledge base that can upload documents, split text into chunks, store embeddings, retrieve relevant context, and generate answers with source citations.
+这个项目不是企业级知识库系统，而是一个完整、可运行、可讲清楚工程取舍的本地 RAG demo。
 
-## Planned Stack
+当前重点：
+
+- 保持本地单机可运行。
+- 保持架构实用，避免过早引入复杂基础设施。
+- 用可重复的离线评估证明检索质量变化。
+- 用中文 React 界面展示上传、检索、问答、引用、历史记录和本地数据管理。
+- 用 README 作为简历和作品集入口。
+
+## 技术栈
 
 - Backend: FastAPI
-- Vector database: ChromaDB
-- PDF parsing: PyMuPDF
-- LLM: DeepSeek Chat
-- Embedding: bge-m3
 - Frontend: React + Vite + TypeScript
+- Vector Store: ChromaDB
+- Business Data: SQLite + SQLAlchemy
+- Embedding: `BAAI/bge-m3`
+- LLM: DeepSeek Chat
+- PDF Parsing: PyMuPDF
+- Local Deployment Source: Docker Compose 配置已提供
 
-## First Milestone
+## 当前状态
 
-The first milestone focuses on the backend RAG loop:
+已完成的主要能力：
 
-1. Upload PDF/TXT/Markdown documents.
-2. Extract text.
-3. Split text into chunks.
-4. Generate embeddings.
-5. Store vectors and metadata in ChromaDB.
-6. Retrieve Top-K chunks for a user question.
-7. Generate an answer with DeepSeek Chat.
-8. Return source citations.
+- Phase 1: 后端 RAG 闭环。
+- Phase 2: React 前端本地演示流。
+- Phase 3: 配置管理、SQLite 文档元数据、文档生命周期状态、Docker Compose 源码配置。
+- Phase 4: RAG 离线评估、参数 sweep、检索默认值调优、reranker 对比评估。
+- Phase 5: 异步文档处理、SSE 流式回答。
+- Phase 6: 聊天历史、回答来源引用、评估记录、本地导出和安全清理持久化。
+- Phase 7: 高压评估用例、query rewrite 对比、默认关闭的生产启发式 query rewrite、demo data seeding。
 
-## Repository Status
+当前项目已进入结档/归档状态。近期不再进入新功能阶段；保留为实用、简历导向的本地 demo。
 
-Phase 1 backend closed loop is complete. The backend currently exposes health check, document upload, document list, search, and chat endpoints. Uploaded text is split into chunks, embedded, stored in a local ChromaDB collection, retrievable through semantic search, and usable as context for LLM answers. Document business metadata is stored in local SQLite through SQLAlchemy.
-
-Phase 2 frontend demo flow is complete. The React app can connect to the local backend, show backend health, list uploaded documents, upload and delete PDF/TXT/Markdown files, inspect retrieval details, submit RAG questions, and render expandable answer citations.
-
-Phase 3 engineering hardening is complete. Runtime configuration is centralized, document business metadata is stored in SQLite through SQLAlchemy, and documents carry an explicit lifecycle status. Phase 5 added lightweight asynchronous document processing and optional streaming chat output without introducing a queue, microservice split, or a second vector database.
-
-Phase 6 data persistence is complete for the local demo: chat sessions, assistant messages, displayed answer citations, evaluation run summaries, export, and safe reset are stored in SQLite. Phase 7 has added evaluation-backed query rewrite exploration, a default-off production heuristic rewrite path, and a repeatable demo-data seeding command so local UI demos can start from a clean indexed corpus.
-
-## Architecture
+## 架构概览
 
 ```text
 Browser UI (React + Vite)
   -> FastAPI REST/SSE API
-  -> SQLite document metadata and chat history
-  -> File storage for uploaded documents
+  -> SQLite document metadata / chat history / evaluation runs
+  -> Local uploaded file storage
   -> bge-m3 embeddings
   -> ChromaDB vector store
-  -> DeepSeek Chat for grounded answers
+  -> DeepSeek Chat grounded answer
 ```
 
-The backend keeps business document state, chat history, saved answer citations, and evaluation run summaries in SQLite while vector chunks stay in ChromaDB. Uploads are accepted quickly, then parsed and indexed in a FastAPI background task. Chat first retrieves relevant chunks, applies a low-relevance refusal guard, and then calls DeepSeek only when the local knowledge base has enough evidence.
+核心流程：
 
-For live demos, the checked-in evaluation fixture documents can be seeded into the local SQLite and ChromaDB runtime stores with one CLI command. Query rewrite remains opt-in and observable: when enabled, it changes only the retrieval query and keeps the original user question for generation and chat history.
+1. 用户上传 PDF/TXT/Markdown。
+2. 后端保存文件和 SQLite 文档元数据。
+3. FastAPI `BackgroundTasks` 异步解析、切块、embedding，并写入 ChromaDB。
+4. 用户提问时，后端先做向量检索。
+5. 如果检索证据不足，直接返回 `根据当前知识库资料无法确定。`，不调用 LLM。
+6. 如果证据足够，把检索上下文交给 DeepSeek Chat 生成回答。
+7. 前端展示流式回答、去重后的来源引用、可展开 chunk 细节。
+8. 聊天记录、回答来源引用和评估记录持久化到 SQLite。
 
-## Backend Development
+## 后端运行
 
-Create and activate the backend virtual environment:
+创建 Python 3.12 虚拟环境并安装依赖：
 
 ```powershell
 py -3.12 -m venv backend\.venv
@@ -65,269 +73,62 @@ python -m pip install --upgrade pip
 python -m pip install -r backend\requirements-dev.txt
 ```
 
-Configure DeepSeek credentials:
+配置 DeepSeek：
 
 ```powershell
 Copy-Item backend\.env.example backend\.env
 ```
 
-Then set `DEEPSEEK_API_KEY` in `backend\.env` or in your shell environment before calling `/api/chat`.
+然后在 `backend\.env` 中设置真实的 `DEEPSEEK_API_KEY`。如果只运行后端测试，测试会使用 fake service，不需要真实 key。
 
-Backend runtime configuration is centralized in `backend/app/core/config.py`.
-The `.env` file can override the SQLite database URL, storage paths, CORS origins, chunking parameters, the low-relevance threshold, and DeepSeek model settings.
-
-Run tests:
-
-```powershell
-backend\.venv\Scripts\python.exe -m pytest -q
-```
-
-Run the API locally:
+启动后端：
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Health check:
+健康检查：
 
 ```text
 GET http://127.0.0.1:8000/health
 ```
 
-Upload a document:
-
-```text
-POST http://127.0.0.1:8000/api/documents/upload
-Content-Type: multipart/form-data
-file: PDF/TXT/MD
-```
-
-The upload response includes the generated document id, original filename, saved path, document type, and lifecycle status. Uploads are accepted first as `uploaded`; the backend then parses, chunks, embeds, and indexes the saved file in a local FastAPI background task.
-
-List uploaded documents:
-
-```text
-GET http://127.0.0.1:8000/api/documents
-```
-
-The document list response includes document id, filename, type, created time, chunk count, and lifecycle status. Background processing marks completed documents as `indexed`; processing failures are visible as `failed`; deleted documents are hidden from the normal list while their SQLite record is marked `deleted`.
-
-Search document chunks:
-
-```text
-POST http://127.0.0.1:8000/api/search
-Content-Type: application/json
-
-{
-  "question": "How does RAG work?",
-  "top_k": 5
-}
-```
-
-The search response includes the query, requested Top-K value, and matching chunks with filename, page number, chunk index, content, and score.
-
-Similarity score direction:
-
-- Current score is calculated as `1 / (1 + chroma_distance)`.
-- Larger scores mean more similar chunks.
-- `/api/chat` currently refuses to answer when no chunks are retrieved or the best retrieved score is below `0.5`.
-- When this guard is triggered, the backend returns `根据当前知识库资料无法确定。` without calling DeepSeek.
-
-Ask a question with retrieved context:
-
-```text
-POST http://127.0.0.1:8000/api/chat
-Content-Type: application/json
-
-{
-  "question": "How does RAG work?",
-  "top_k": 5
-}
-```
-
-The chat response includes an LLM-generated answer and the retrieved sources used as context.
-If the retrieved evidence is weak, the backend returns `根据当前知识库资料无法确定。` without calling the LLM.
-Each JSON chat request also creates a local chat session and stores the user question, assistant answer, and displayed answer citations in SQLite.
-
-Stream a question response with Server-Sent Events:
-
-```text
-POST http://127.0.0.1:8000/api/chat/stream
-Content-Type: application/json
-
-{
-  "question": "How does RAG work?",
-  "top_k": 5
-}
-```
-
-The streaming endpoint uses the same retrieval and low-relevance guard as `/api/chat`. It emits `token` events as answer text arrives, then a `sources` event with the final deduplicated citations, followed by a `done` event. The React frontend prefers this streaming endpoint for a more responsive demo and falls back to `/api/chat` if streaming is unavailable.
-Streaming chat also stores the completed turn and displayed citations after the answer finishes, then emits a `session` event with the persisted chat session id.
-
-In the frontend, each answer citation shows a readable preview by default. Expand a citation to inspect the exact chunk index, page, score, and full source text returned by the backend.
-
-List saved chat sessions:
-
-```text
-GET http://127.0.0.1:8000/api/chat/sessions
-```
-
-Read one saved chat session, including messages and persisted answer citations:
-
-```text
-GET http://127.0.0.1:8000/api/chat/sessions/{session_id}
-```
-
-Delete one saved chat session:
-
-```text
-DELETE http://127.0.0.1:8000/api/chat/sessions/{session_id}
-```
-
-## RAG Evaluation
-
-Run the offline retrieval baseline:
+运行后端测试：
 
 ```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval
+backend\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Save the baseline summary and full report to the local SQLite database:
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --save-run
-```
-
-The report includes:
-
-- `source_hit_rate`: whether the expected source file appeared in retrieved results.
-- `marker_hit_rate`: whether the expected evidence text appeared in retrieved chunks.
-- `refusal_accuracy`: whether unrelated questions are correctly treated as insufficient evidence.
-
-Run a small retrieval parameter sweep:
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --chunk-sizes 400,800,1200 --chunk-overlaps 0,80,120 --top-ks 3,5 --min-relevance-scores 0.45,0.5,0.55
-```
-
-The sweep ranks configurations by source hit rate, marker hit rate, refusal accuracy, then smaller `top_k` and `chunk_size` for a leaner context.
-
-The current expanded fixture has 20 cases covering upload chunking, low-evidence refusal, Docker demo notes, Phase 3 configuration/SQLite lifecycle behavior, frontend retrieval evidence, citation expansion, roadmap boundaries, an English lifecycle question, unrelated-question refusal, and Phase 7 pressure cases for short ambiguous questions, exact keywords, follow-up phrasing, and advanced RAG scope boundaries.
-
-On the earlier 15-case fixture, the best measured configuration was `chunk_size=400`, `chunk_overlap=0`, `top_k=3`, and `min_relevance_score=0.45`; these values are now the backend defaults and can still be overridden with `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_DEFAULT_TOP_K`, and `RAG_MIN_RELEVANCE_SCORE`. The current 20-case Phase 7 fixture keeps source hit rate and refusal accuracy at `1.0`, while marker hit rate is `0.85`, exposing harder evidence-selection gaps for future advanced RAG work.
-
-Run a retrieval-only versus reranked comparison:
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-reranker --top-k 3 --initial-top-k 5
-```
-
-The current comparison uses a lightweight keyword-overlap reranker only inside the offline evaluation script. On the 20-case Phase 7 fixture it produced no metric lift over the tuned retrieval-only baseline, so the production chat path keeps the simpler retrieval-only flow until a future approach improves the measured evidence-selection gap.
-
-Run a retrieval-only versus static query-rewrite comparison:
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-query-rewrite
-```
-
-The static query-rewrite comparison is evaluation-only. On the 20-case Phase 7 fixture it improved marker hit rate from `0.85` to `0.90` without changing source hit rate or refusal accuracy, so query rewrite became a stronger next candidate than the current lightweight reranker. `StaticQueryRewriter` is still fixture-specific and is not connected to production.
-
-Run a retrieval-only versus heuristic query-rewrite comparison:
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --compare-heuristic-query-rewrite
-```
-
-The heuristic rewrite mode uses transparent project-term rules instead of exact fixture-question mappings. On the 20-case Phase 7 fixture it also improved marker hit rate from `0.85` to `0.90` while keeping source hit rate and refusal accuracy at `1.0`.
-
-Production query rewrite is available as an opt-in retrieval experiment:
+最近验证结果：
 
 ```text
-RAG_QUERY_REWRITE_ENABLED=false
+92 passed, 5 warnings
 ```
 
-When enabled, the backend applies a local deterministic heuristic rewrite before embedding the retrieval query. The original user question is still sent to the LLM and saved in chat history. `/api/search`, `/api/chat`, and `/api/chat/stream` expose retrieval query metadata so the frontend can show what was actually searched.
+## 前端运行
 
-List saved evaluation run summaries:
-
-```text
-GET http://127.0.0.1:8000/api/evaluations
-```
-
-Read one saved evaluation run, including the full report:
-
-```text
-GET http://127.0.0.1:8000/api/evaluations/{run_id}
-```
-
-## Local Data Export And Reset
-
-Export local demo data from SQLite:
-
-```text
-GET http://127.0.0.1:8000/api/admin/export
-```
-
-The export response includes active document metadata, saved chat sessions with messages and answer citations, and saved evaluation runs.
-
-Safely reset local chat and evaluation history:
-
-```text
-POST http://127.0.0.1:8000/api/admin/reset
-Content-Type: application/json
-
-{
-  "reset_chat_history": true,
-  "reset_evaluations": true
-}
-```
-
-This safe reset does not delete uploaded documents or vector-store data by default. Passing `reset_documents: true` is rejected by this endpoint so document deletion still goes through the existing document deletion path.
-
-The frontend includes a compact local-data panel for recent chat sessions, saved evaluation summaries, export, and safe reset controls.
-
-## Frontend Development
-
-Install frontend dependencies:
+安装依赖：
 
 ```powershell
 cd frontend
 npm.cmd install
 ```
 
-From the repository root, copy the frontend environment example if you need to override the API URL:
-
-```powershell
-Copy-Item frontend\.env.example frontend\.env
-```
-
-By default, the frontend expects the backend at:
-
-```text
-http://127.0.0.1:8000
-```
-
-Run the frontend locally:
+启动前端：
 
 ```powershell
 cd frontend
 npm.cmd run dev -- --host 127.0.0.1
 ```
 
-Open the app:
+打开页面：
 
 ```text
 http://127.0.0.1:5173/
 ```
 
-Run frontend checks:
+运行前端检查：
 
 ```powershell
 cd frontend
@@ -336,121 +137,211 @@ npm.cmd run build
 npm.cmd run lint
 ```
 
-## Docker Compose Demo
-
-Create the backend environment file and set your DeepSeek key:
-
-```powershell
-Copy-Item backend\.env.example backend\.env
-```
-
-Edit `backend\.env` and replace `DEEPSEEK_API_KEY` with your real key. The Compose setup overrides the runtime storage paths so SQLite, uploaded files, ChromaDB data, and local model cache live in the `rag_backend_data` Docker volume.
-
-Make sure Docker Desktop is running before building or starting the Compose services.
-
-Build the containers:
-
-```powershell
-docker compose build
-```
-
-Start the local Docker demo:
-
-```powershell
-docker compose up
-```
-
-Open the app:
+最近验证结果：
 
 ```text
-Frontend: http://127.0.0.1:5173/
-Backend health: http://127.0.0.1:8000/health
+frontend tests: 17 passed
+build: passed
+lint: passed
 ```
 
-Stop the containers:
+## 本地 Demo Checklist
+
+为了避免本地 SQLite 文档记录和 ChromaDB 向量数据不同步，演示前建议先重建 demo 数据。
+
+从 `backend/` 运行：
 
 ```powershell
-docker compose down
-```
-
-The first real embedding request can still be slow because `bge-m3` may need to download and load inside the backend container. The model cache is stored in the Docker volume after the first successful load.
-
-## Local Demo Flow
-
-Start the backend first, then start the frontend in a second terminal.
-
-Prepare a clean local demo corpus from the checked-in evaluation fixtures:
-
-```powershell
-cd backend
 .\.venv\Scripts\python.exe -m app.cli.seed_demo_data --reset-documents
 ```
 
-This rebuilds local SQLite document metadata, copied uploaded files, and the ChromaDB vector index from `backend/evaluation/fixtures/documents`. It is useful when `/api/documents` has records but retrieval returns no chunks because the ignored local ChromaDB data was cleaned or recreated.
+这个命令会从 `backend/evaluation/fixtures/documents` 重建：
 
-For a demo that highlights the optional Phase 7 query-rewrite path, set this in `backend\.env` before starting the backend:
+- 本地 demo 文档文件。
+- SQLite 文档元数据。
+- ChromaDB 向量索引。
 
-```text
-RAG_QUERY_REWRITE_ENABLED=true
-```
+推荐演示流程：
 
-Keep the default off for normal development. The measured benefit is narrow: it improves short ambiguous retrieval cases in the local fixture without changing the original user question sent to the LLM.
-
-Confirm both services are reachable:
+1. Seed demo data。
+2. 启动 backend。
+3. 启动 frontend。
+4. 验证后端和前端可访问：
 
 ```powershell
 Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing
 Invoke-WebRequest -Uri "http://127.0.0.1:5173/" -UseBasicParsing
 ```
 
-For a quick backend upload smoke test, use `curl.exe`:
+5. 在前端提问固定 demo 问题，例如：
 
-```powershell
-curl.exe -s -X POST -F "file=@D:\path\to\notes.txt;type=text/plain" "http://127.0.0.1:8000/api/documents/upload"
+```text
+向量库先保留哪个？
 ```
 
-Then refresh the frontend, confirm the document appears in the document list, ask a question, and check that the answer includes source citations.
+6. 展示流式回答、来源引用展开、检索调试面板和本地数据面板。
 
-## Demo Script
+可选：如果要展示 Phase 7 query rewrite 对短问题检索的改善，可以在启动后端前临时设置：
 
-1. Start the backend and frontend.
-2. Upload a small PDF, TXT, or Markdown document.
-3. Watch the document status move from `uploaded` to `indexed`.
-4. Ask a document-specific question in the chat panel.
-5. Point out that the answer streams in progressively.
-6. Expand a citation to show the exact chunk, page, score, and source text.
-7. Ask an unrelated question and show the deterministic refusal: `根据当前知识库资料无法确定。`
-8. Open the retrieval debug panel to show which chunks were retrieved before generation.
+```text
+RAG_QUERY_REWRITE_ENABLED=true
+```
 
-## Engineering Highlights
+默认保持 `false`。这个能力只改变 retrieval query，不改变发送给 LLM 的原始用户问题，也不改变聊天历史里保存的问题。
 
-- Backend-first RAG loop with upload, parsing, chunking, embedding, retrieval, answer generation, and citations.
-- SQLite stores business document metadata while ChromaDB stores vector chunks.
-- Explicit lifecycle states make document processing observable: `uploaded`, `indexed`, `failed`, and `deleted`.
-- Deletion keeps metadata, uploaded files, and vector chunks consistent.
-- Retrieval quality is measured with a repeatable offline fixture and parameter sweep.
-- Demo data can be rebuilt from checked-in fixtures with a backend CLI so local demos are repeatable.
-- Low-relevance refusal prevents weakly grounded LLM calls.
-- Server-Sent Events stream answer tokens for a more responsive local demo.
-- SQLite-backed chat sessions persist local question/answer history and displayed answer citations across backend restarts.
-- Evaluation run summaries can be saved and reviewed later from SQLite.
-- Local export and safe reset controls make demo data easier to inspect and clean without adding user accounts or admin roles.
-- Optional heuristic query rewrite is default-off, measured by the same fixture, and visible in retrieval debug metadata.
-- Frontend tests cover upload/list behavior, deletion, retrieval debug, chat, streaming fallback, citations, and layout constraints.
+## 主要 API
 
-## Key Tradeoffs
+文档：
 
-- ChromaDB remains the vector store because the current project has a narrow local retrieval surface and source-hit coverage remains strong.
-- The production chat path keeps query rewrite disabled by default; the opt-in heuristic rewrite is local, transparent, and only changes the retrieval query.
-- Demo data seeding resets local document runtime stores by design; it is a developer/demo CLI, not an authenticated admin feature.
-- Phase 7 advanced RAG work starts with harder evaluation cases before implementing hybrid search or multi-turn conversational RAG.
-- Document processing uses FastAPI `BackgroundTasks` instead of Celery or Redis to keep the first production-style version simple and runnable locally.
-- Docker source files are present, but Docker runtime build/up verification is skipped until the local Docker Hub or registry mirror path is reliable.
+```text
+POST   /api/documents/upload
+GET    /api/documents
+DELETE /api/documents/{document_id}
+```
 
-## Resume Bullets
+检索和问答：
 
-- Built a local RAG knowledge-base app with FastAPI, React, ChromaDB, SQLite, DeepSeek Chat, and `bge-m3` embeddings.
-- Implemented document upload, asynchronous indexing, semantic retrieval, low-confidence refusal, streaming chat output, persisted chat history, and expandable source citations.
-- Added repeatable RAG evaluation with fixture-based source-hit, marker-hit, and refusal-accuracy metrics, then tuned retrieval defaults from measured results.
-- Hardened document lifecycle consistency across SQLite metadata, uploaded files, and vector-store chunks, including deletion and failed-processing states.
-- Added an evaluation-backed, default-off query rewrite path and a demo-data seeding CLI for repeatable local presentations.
+```text
+POST /api/search
+POST /api/chat
+POST /api/chat/stream
+```
+
+聊天历史：
+
+```text
+GET    /api/chat/sessions
+GET    /api/chat/sessions/{session_id}
+DELETE /api/chat/sessions/{session_id}
+```
+
+评估记录：
+
+```text
+GET /api/evaluations
+GET /api/evaluations/{run_id}
+```
+
+本地数据：
+
+```text
+GET  /api/admin/export
+POST /api/admin/reset
+```
+
+## 文档生命周期
+
+文档状态包括：
+
+- `uploaded`: 文件已保存，等待后台处理。
+- `indexed`: 文档已解析、切块、写入向量库。
+- `failed`: 后台处理失败。
+- `deleted`: 已删除，普通文档列表不再展示。
+
+删除文档时，后端会保持三类数据一致：
+
+- SQLite 文档元数据标记为 `deleted`。
+- 本地上传文件删除。
+- ChromaDB 中对应 `document_id` 的向量删除。
+
+## RAG 评估
+
+运行默认离线评估：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval
+```
+
+保存评估结果到 SQLite：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --save-run
+```
+
+评估指标：
+
+- `source_hit_rate`: 预期来源文件是否出现在检索结果中。
+- `marker_hit_rate`: 预期证据文本是否出现在检索 chunk 中。
+- `refusal_accuracy`: 无关问题是否被正确判定为证据不足。
+
+参数 sweep：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m evaluation.evaluate_retrieval --chunk-sizes 400,800,1200 --chunk-overlaps 0,80,120 --top-ks 3,5 --min-relevance-scores 0.45,0.5,0.55
+```
+
+当前默认检索参数来自早期 sweep 结果：
+
+```text
+chunk_size=400
+chunk_overlap=0
+top_k=3
+min_relevance_score=0.45
+```
+
+Phase 7 的 20 条评估用例覆盖短问题、精确关键词、追问式表达、无关问题拒答和高级 RAG 边界。当前基线结果：
+
+```text
+source_hit_rate: 1.0
+marker_hit_rate: 0.85
+refusal_accuracy: 1.0
+```
+
+启发式 query rewrite 对比结果：
+
+```text
+source_hit_rate: 1.0
+marker_hit_rate: 0.90
+refusal_accuracy: 1.0
+```
+
+结论：query rewrite 有窄范围收益，但生产路径默认关闭。当前不接入 Qdrant、hybrid search 或 multi-turn RAG。
+
+## Docker Compose
+
+项目包含 Docker Compose 源码配置：
+
+```powershell
+docker compose config --quiet
+```
+
+最近验证：
+
+```text
+compose config: passed
+```
+
+Docker runtime build/up 当前跳过。原因是本地 Docker Hub/auth/registry 访问和 mirror 构建尝试曾多次超时。除非明确需要，不继续排障 Docker runtime。
+
+## 工程亮点
+
+- 后端优先实现完整 RAG 闭环：上传、解析、切块、embedding、检索、生成和引用。
+- SQLite 存业务数据，ChromaDB 存向量数据，职责清晰。
+- 文档生命周期状态可观察，删除流程同时清理元数据、文件和向量。
+- 异步文档处理使用 FastAPI `BackgroundTasks`，避免过早引入 Celery/Redis。
+- 低相关度拒答在调用 LLM 前执行，减少弱证据回答。
+- SSE 流式回答提升本地 demo 观感。
+- 聊天历史、回答来源引用和评估结果持久化到 SQLite。
+- 离线评估和参数 sweep 让检索调优基于数据，而不是凭感觉。
+- Demo data seeding CLI 让本地演示可以重复重建。
+- Query rewrite 默认关闭、可观测、可评估，避免把实验能力包装成确定收益。
+
+## 关键取舍
+
+- 保留 ChromaDB，不迁移 Qdrant：当前本地 demo 场景足够，迁移收益不足。
+- 不做 auth/权限系统：项目定位是本地演示，不扩成企业系统。
+- 不做 agent tools、multimodal、microservice split：避免偏离 RAG 知识库主线。
+- 不接入生产 reranker：离线对比没有带来指标提升。
+- 不默认开启 query rewrite：它对短问题有帮助，但收益范围有限。
+- Docker 源码配置保留，runtime build/up 暂停排障。
+
+## 简历表述参考
+
+- 构建了一个本地 RAG 知识库应用，技术栈包括 FastAPI、React、ChromaDB、SQLite、DeepSeek Chat 和 `bge-m3`。
+- 实现了文档上传、异步索引、语义检索、低置信拒答、流式回答、聊天历史持久化和可展开来源引用。
+- 建立了可重复的 RAG 离线评估体系，用 source hit、marker hit 和 refusal accuracy 衡量检索质量，并据此调优默认参数。
+- 处理了文档生命周期一致性，保证 SQLite 元数据、本地文件和向量库数据在删除和失败场景下保持一致。
+- 增加了默认关闭的 query rewrite 实验路径和 demo data seeding CLI，让本地演示可复现、可解释。
