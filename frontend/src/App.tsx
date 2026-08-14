@@ -14,20 +14,20 @@ import {
   searchDocuments,
   streamQuestion,
   uploadDocument,
-  type ChatSessionSummary,
-  type DocumentSummary,
-  type EvaluationRunSummary,
-  type QueryRewriteMetadata,
-  type SourceCitation,
 } from './api/client'
-
-type BackendStatus = 'checking' | 'online' | 'offline'
-type LoadingStatus = 'idle' | 'loading' | 'success' | 'error'
-type ChatMessage = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-}
+import { ChatPanel } from './components/ChatPanel'
+import { DocumentPanel } from './components/DocumentPanel'
+import { PersistencePanel } from './components/PersistencePanel'
+import type {
+  BackendStatus,
+  ChatMessage,
+  ChatSessionSummary,
+  DocumentSummary,
+  EvaluationRunSummary,
+  LoadingStatus,
+  QueryRewriteMetadata,
+  SourceCitation,
+} from './components/types'
 
 function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking')
@@ -355,6 +355,18 @@ function App() {
     }
   }
 
+  function handleToggleSource(sourceKey: string) {
+    setExpandedSourceKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys)
+      if (nextKeys.has(sourceKey)) {
+        nextKeys.delete(sourceKey)
+      } else {
+        nextKeys.add(sourceKey)
+      }
+      return nextKeys
+    })
+  }
+
   const canAsk = backendStatus === 'online' && chatStatus !== 'loading'
   const canSearch = backendStatus === 'online' && retrievalStatus !== 'loading'
   const canUseAdminActions = backendStatus === 'online' && adminActionStatus !== 'loading'
@@ -378,351 +390,60 @@ function App() {
 
       <section className="workspace" aria-label="文档问答工作区">
         <aside className="documents-panel" aria-labelledby="documents-title">
-          <div className="panel-heading">
-            <div>
-              <p className="section-label">文档</p>
-              <h2 id="documents-title">知识文件</h2>
-            </div>
-            <button
-              className="secondary-button"
-              disabled={uploadStatus === 'loading' || backendStatus !== 'online'}
-              onClick={() => fileInputRef.current?.click()}
-              type="button"
-            >
-              上传
-            </button>
-          </div>
-
-          <label className={`upload-zone ${uploadStatus}`} aria-label="文件上传区域">
-            <input
-              accept=".pdf,.txt,.md,.markdown,application/pdf,text/plain,text/markdown"
-              aria-label="选择文档文件"
-              disabled={uploadStatus === 'loading' || backendStatus !== 'online'}
-              onChange={(event) => void handleUploadChange(event)}
-              ref={fileInputRef}
-              type="file"
-            />
-            <span className="upload-icon" aria-hidden="true">
-              +
-            </span>
-            <div>
-              <strong>
-                {uploadStatus === 'loading' ? '正在处理文档' : '选择 PDF、TXT 或 Markdown'}
-              </strong>
-              <p>{uploadMessage}</p>
-            </div>
-          </label>
-
-          <div className="document-list" aria-label="已上传文档">
-            <p className={`document-state ${documentStatus}`}>{documentMessage}</p>
-            {hasProcessingDocuments ? (
-              <p className="document-processing-note">文档处理中，完成后会自动刷新索引状态。</p>
-            ) : null}
-            {documents.length > 0
-              ? documents.map((document) => (
-                  <article
-                    className={
-                      document.id === selectedDocumentId ? 'document-row active' : 'document-row'
-                    }
-                    key={document.id}
-                    onClick={() => setSelectedDocumentId(document.id)}
-                  >
-                    <div className="file-type">{document.type.toUpperCase()}</div>
-                    <div className="document-meta">
-                      <h3>{document.filename}</h3>
-                      <span className={`document-status-badge ${document.status}`}>
-                        {formatDocumentStatus(document.status)}
-                      </span>
-                      <p>
-                        {document.chunk_count} 个片段 · {document.created_at}
-                      </p>
-                    </div>
-                    <button
-                      aria-label={`删除 ${document.filename}`}
-                      className="document-delete-button"
-                      disabled={deletingDocumentId === document.id || backendStatus !== 'online'}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void handleDeleteDocument(document)
-                      }}
-                      type="button"
-                    >
-                      {deletingDocumentId === document.id ? '删除中' : '删除'}
-                    </button>
-                  </article>
-                ))
-              : null}
-          </div>
-
-          <section className="persistence-panel" aria-label="本地持久化数据">
-            <div className="persistence-heading">
-              <div>
-                <p className="section-label">持久化</p>
-                <h3>本地数据</h3>
-              </div>
-              <span className={`persistence-state ${persistenceStatus}`}>{persistenceMessage}</span>
-            </div>
-
-            <div className="persistence-actions">
-              <button
-                disabled={!canUseAdminActions}
-                onClick={() => void handleExportLocalData()}
-                type="button"
-              >
-                导出数据
-              </button>
-              <button
-                disabled={!canUseAdminActions}
-                onClick={() => void handleResetLocalData()}
-                type="button"
-              >
-                安全清理
-              </button>
-            </div>
-            <p className={`admin-state ${adminActionStatus}`} aria-live="polite">
-              {adminActionMessage}
-            </p>
-
-            <div className="persistence-grid">
-              <section className="persistence-group" aria-label="最近问答">
-                <h4>最近问答</h4>
-                {chatSessions.length > 0 ? (
-                  chatSessions.slice(0, 3).map((session) => (
-                    <article className="persistence-row" key={session.id}>
-                      <strong>{session.title}</strong>
-                      <span>{session.message_count} 条消息</span>
-                    </article>
-                  ))
-                ) : (
-                  <p>暂无问答记录</p>
-                )}
-              </section>
-
-              <section className="persistence-group" aria-label="评估记录">
-                <h4>评估记录</h4>
-                {evaluationRuns.length > 0 ? (
-                  evaluationRuns.slice(0, 3).map((run) => (
-                    <article className="persistence-row evaluation-row" key={run.id}>
-                      <strong>
-                        {run.mode} · {run.case_count} cases
-                      </strong>
-                      <span>命中 {run.source_hit_rate.toFixed(2)}</span>
-                      <span>证据 {run.marker_hit_rate.toFixed(2)}</span>
-                      <span>拒答 {run.refusal_accuracy.toFixed(2)}</span>
-                    </article>
-                  ))
-                ) : (
-                  <p>暂无评估记录</p>
-                )}
-              </section>
-            </div>
-          </section>
+          <DocumentPanel
+            backendStatus={backendStatus}
+            deletingDocumentId={deletingDocumentId}
+            documentMessage={documentMessage}
+            documentStatus={documentStatus}
+            documents={documents}
+            fileInputRef={fileInputRef}
+            hasProcessingDocuments={hasProcessingDocuments}
+            onDeleteDocument={(document) => void handleDeleteDocument(document)}
+            onSelectDocument={setSelectedDocumentId}
+            onUploadChange={(event) => void handleUploadChange(event)}
+            selectedDocumentId={selectedDocumentId}
+            uploadMessage={uploadMessage}
+            uploadStatus={uploadStatus}
+          />
+          <PersistencePanel
+            adminActionMessage={adminActionMessage}
+            adminActionStatus={adminActionStatus}
+            canUseAdminActions={canUseAdminActions}
+            chatSessions={chatSessions}
+            evaluationRuns={evaluationRuns}
+            onExportLocalData={() => void handleExportLocalData()}
+            onResetLocalData={() => void handleResetLocalData()}
+            persistenceMessage={persistenceMessage}
+            persistenceStatus={persistenceStatus}
+          />
         </aside>
 
-        <section className="chat-panel" aria-labelledby="chat-title">
-          <div className="panel-heading">
-            <div>
-              <p className="section-label">助手</p>
-              <h2 id="chat-title">基于文档提问</h2>
-            </div>
-            <label className="topk-control">
-              <span>Top-K</span>
-              <select
-                aria-label="Top-K 来源数量"
-                disabled={chatStatus === 'loading'}
-                onChange={(event) => setTopK(Number(event.currentTarget.value))}
-                value={topK}
-              >
-                <option value="3">3</option>
-                <option value="5">5</option>
-                <option value="8">8</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="conversation" aria-label="问答记录" ref={conversationRef}>
-            {chatMessages.length > 0 ? (
-              chatMessages.map((message) => (
-                <article
-                  className={
-                    message.role === 'user' ? 'message user-message' : 'message assistant-message'
-                  }
-                  key={message.id}
-                >
-                  <span className="message-role">{message.role === 'user' ? '问题' : '回答'}</span>
-                  <p>{message.content}</p>
-                </article>
-              ))
-            ) : (
-              <article className="message assistant-message empty-message">
-                <span className="message-role">回答</span>
-                <p>上传文档后，可以在这里提出问题并查看基于来源的回答。</p>
-              </article>
-            )}
-            <p className={`chat-state ${chatStatus}`} aria-live="polite">
-              {chatMessage}
-            </p>
-          </div>
-
-          <section className="retrieval-panel" aria-label="检索详情">
-            <div className="retrieval-heading">
-              <h3>检索详情</h3>
-              <span>{retrievalResults.length} 个召回片段</span>
-            </div>
-            <form
-              className="retrieval-form"
-              aria-label="检索文档片段"
-              onSubmit={(event) => void handleRetrievalSubmit(event)}
-            >
-              <label htmlFor="retrieval-question">检索问题</label>
-              <div className="retrieval-input-row">
-                <input
-                  id="retrieval-question"
-                  onChange={(event) => setRetrievalQuestion(event.currentTarget.value)}
-                  placeholder="输入问题查看召回片段"
-                  type="text"
-                  value={retrievalQuestion}
-                />
-                <button disabled={!canSearch} type="submit">
-                  {retrievalStatus === 'loading' ? '检索中' : '检索'}
-                </button>
-              </div>
-            </form>
-            <p className={`retrieval-state ${retrievalStatus}`} aria-live="polite">
-              {retrievalMessage}
-            </p>
-            {retrievalMetadata ? (
-              <div className="retrieval-query-debug" aria-label="检索问题改写状态">
-                <span>{retrievalMetadata.query_rewritten ? '已改写为' : '检索问题未改写'}</span>
-                <p>{retrievalMetadata.retrieval_query}</p>
-              </div>
-            ) : null}
-            <div className="retrieval-list">
-              {retrievalResults.length > 0
-                ? retrievalResults.map((result, index) => (
-                    <article
-                      className="retrieval-card"
-                      key={`${result.filename}-${result.page}-${result.chunk_index}-${index}`}
-                    >
-                      <div className="source-meta">
-                        <strong>{result.filename}</strong>
-                        <span>
-                          Chunk {result.chunk_index} · 第 {result.page} 页 · 相似度{' '}
-                          {result.score.toFixed(3)}
-                        </span>
-                      </div>
-                      <p>{result.content}</p>
-                    </article>
-                  ))
-                : null}
-            </div>
-          </section>
-
-          <section className="sources-panel" aria-label="回答来源">
-            <div className="sources-heading">
-              <h3>引用来源</h3>
-              <span>{answerSources.length} 个匹配片段</span>
-            </div>
-            <div className="source-list">
-              {answerSources.length > 0 ? (
-                answerSources.map((source, index) => {
-                  const sourceKey = getSourceKey(source, index)
-                  const isExpanded = expandedSourceKeys.has(sourceKey)
-
-                  return (
-                    <article className="source-card" key={sourceKey}>
-                      <div className="source-meta">
-                        <strong>{source.filename}</strong>
-                        <span>
-                          第 {source.page} 页 · 相似度 {source.score.toFixed(3)}
-                        </span>
-                      </div>
-                      <p>{formatSourcePreview(source.content)}</p>
-                      <button
-                        aria-expanded={isExpanded}
-                        aria-label={`${isExpanded ? '收起' : '展开'} ${source.filename} 第 ${
-                          source.page
-                        } 页 Chunk ${source.chunk_index}`}
-                        className="source-expand-button"
-                        onClick={() => {
-                          setExpandedSourceKeys((currentKeys) => {
-                            const nextKeys = new Set(currentKeys)
-                            if (nextKeys.has(sourceKey)) {
-                              nextKeys.delete(sourceKey)
-                            } else {
-                              nextKeys.add(sourceKey)
-                            }
-                            return nextKeys
-                          })
-                        }}
-                        type="button"
-                      >
-                        {isExpanded ? '收起片段' : '展开片段'}
-                      </button>
-                      {isExpanded ? (
-                        <div className="source-detail">
-                          <span>
-                            Chunk {source.chunk_index} · 第 {source.page} 页 · 相似度{' '}
-                            {source.score.toFixed(3)}
-                          </span>
-                          <p>{source.content}</p>
-                        </div>
-                      ) : null}
-                    </article>
-                  )
-                })
-              ) : (
-                <p className="source-empty">完成一次提问后，这里会显示后端返回的来源片段。</p>
-              )}
-            </div>
-          </section>
-
-          <form className="chat-input" aria-label="提出问题" onSubmit={(event) => void handleChatSubmit(event)}>
-            <label htmlFor="question">问题</label>
-            <div className="input-row">
-              <input
-                id="question"
-                onChange={(event) => setQuestion(event.currentTarget.value)}
-                placeholder="输入一个基于已上传文档的问题"
-                value={question}
-                type="text"
-              />
-              <button disabled={!canAsk} type="submit">
-                {chatStatus === 'loading' ? '生成中' : '提问'}
-              </button>
-            </div>
-          </form>
-        </section>
+        <ChatPanel
+          answerSources={answerSources}
+          canAsk={canAsk}
+          canSearch={canSearch}
+          chatMessage={chatMessage}
+          chatMessages={chatMessages}
+          chatStatus={chatStatus}
+          conversationRef={conversationRef}
+          expandedSourceKeys={expandedSourceKeys}
+          onChatSubmit={(event) => void handleChatSubmit(event)}
+          onQuestionChange={setQuestion}
+          onRetrievalQuestionChange={setRetrievalQuestion}
+          onRetrievalSubmit={(event) => void handleRetrievalSubmit(event)}
+          onToggleSource={handleToggleSource}
+          onTopKChange={setTopK}
+          question={question}
+          retrievalMessage={retrievalMessage}
+          retrievalMetadata={retrievalMetadata}
+          retrievalQuestion={retrievalQuestion}
+          retrievalResults={retrievalResults}
+          retrievalStatus={retrievalStatus}
+          topK={topK}
+        />
       </section>
     </main>
   )
-}
-
-function formatSourcePreview(content: string) {
-  return content
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/^#{1,6}\s*/gm, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function getSourceKey(source: SourceCitation, index: number) {
-  return `${source.filename}-${source.page}-${source.chunk_index}-${index}`
-}
-
-function formatDocumentStatus(status: DocumentSummary['status']) {
-  const statusLabels: Record<DocumentSummary['status'], string> = {
-    uploaded: '已上传',
-    indexed: '已索引',
-    failed: '处理失败',
-    deleted: '已删除',
-  }
-
-  return statusLabels[status]
 }
 
 export default App
