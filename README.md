@@ -2,6 +2,8 @@
 
 一个面向本地演示和简历展示的 RAG 文档问答项目。项目以 FastAPI 后端为核心，支持上传 PDF/TXT/Markdown 文档、切分文本、生成向量、语义检索，并用 DeepSeek Chat 基于检索结果生成带来源引用的回答。
 
+English positioning: Local RAG knowledge base demo.
+
 ## 项目定位
 
 这个项目不是企业级知识库系统，而是一个完整、可运行、可讲清楚工程取舍的本地 RAG demo。
@@ -41,14 +43,16 @@
 
 ## 架构概览
 
-```text
-Browser UI (React + Vite)
-  -> FastAPI REST/SSE API
-  -> SQLite document metadata / chat history / evaluation runs
-  -> Local uploaded file storage
-  -> bge-m3 embeddings
-  -> ChromaDB vector store
-  -> DeepSeek Chat grounded answer
+```mermaid
+flowchart LR
+  Browser["React + Vite UI"] --> API["FastAPI REST + SSE API"]
+  API --> SQLite["SQLite: documents, chat history, sources, evaluations"]
+  API --> Files["Local uploaded files"]
+  API --> Embed["bge-m3 embeddings"]
+  Embed --> Chroma["ChromaDB vector store"]
+  API --> DeepSeek["DeepSeek Chat"]
+  Chroma --> API
+  DeepSeek --> API
 ```
 
 核心流程：
@@ -188,6 +192,17 @@ RAG_QUERY_REWRITE_ENABLED=true
 ```
 
 默认保持 `false`。这个能力只改变 retrieval query，不改变发送给 LLM 的原始用户问题，也不改变聊天历史里保存的问题。
+
+## Demo 截图
+
+本项目的截图建议在演示前按 `本地 Demo Checklist` 重新生成，避免提交过期运行态图片。当前推荐截图路径：
+
+```text
+C:\Users\Leezhaoji\AppData\Local\Temp\rag-closeout-screenshots\desktop.png
+C:\Users\Leezhaoji\AppData\Local\Temp\rag-closeout-screenshots\mobile.png
+```
+
+截图应覆盖：文档列表、流式回答、引用来源展开、检索详情和本地数据面板。
 
 ## 主要 API
 
