@@ -46,5 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare Compose env file
+        run: cp backend/.env.example backend/.env
       - name: Validate Docker Compose config
         run: docker compose config --quiet
